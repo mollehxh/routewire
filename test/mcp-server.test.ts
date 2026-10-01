@@ -104,7 +104,7 @@ describe("Sideband MCP server", () => {
     expect(listed.tools.map(tool => tool.name)).toEqual(["bootstrap", "exec"]);
     const execTool = listed.tools.find(tool => tool.name === "exec")!;
     expect(execTool.description).toContain("EXACT CODEX EXEC DESCRIPTION");
-    expect(execTool.description).toContain("Prefer a directly exposed Sideband native tool");
+    expect(execTool.description).toContain("Prefer a directly exposed native tool");
     expect(execTool.inputSchema).toMatchObject({
       type: "object",
       required: ["code"],
@@ -122,7 +122,7 @@ describe("Sideband MCP server", () => {
       throw new Error("expected provider tool call");
     }
     expect(providerReply.input).toContain("tools.exec_command");
-    expect(providerReply.input).toContain("Sideband blocked model-spawning tool");
+    expect(providerReply.input).toContain("Blocked model-spawning tool");
 
     bridge.acceptModelRequest(
       requestWithExec({

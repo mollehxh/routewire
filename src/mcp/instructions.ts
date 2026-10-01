@@ -1,6 +1,6 @@
-export const SIDEBAND_MCP_INSTRUCTIONS = `Sideband exposes one persistent live Codex runtime and its native tool surface.
+export const SIDEBAND_MCP_INSTRUCTIONS = `This server exposes one persistent live Codex runtime and its native tool surface.
 
-Before ordinary substantive Sideband work in a conversation, call \`bootstrap\` once if the current Sideband/Codex context has not already been loaded. It returns the current runtime/project context, applicable AGENTS.md instructions, permissions, and the native Codex skill catalog. Reuse that context for later turns unless the Sideband runtime was restarted or the context is known to have changed.
+Before ordinary substantive work in a conversation, call \`bootstrap\` once if the current Codex context has not already been loaded. It returns the current runtime/project context, applicable AGENTS.md instructions, permissions, and the native Codex skill catalog. Reuse that context for later turns unless the runtime was restarted or the context is known to have changed.
 
 Skill handling:
 - \`$skills\`: call \`skills\` and present the available skills. Do not call \`bootstrap\` only to list the catalog, and do not load full skill instructions only to list it.

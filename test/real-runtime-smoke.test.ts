@@ -111,7 +111,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
             code: [
               "const modelTools = ALL_TOOLS.filter(x => /spawn_agent|spawn_session|run_model|collaboration__/i.test(x.name)).map(x => x.name);",
               "let blocked = false;",
-              "try { void tools.mcp__sideband_probe__collaboration__spawn_agent; } catch (error) { blocked = String(error).includes('Sideband blocked model-spawning tool'); }",
+              "try { void tools.mcp__sideband_probe__collaboration__spawn_agent; } catch (error) { blocked = String(error).includes('Blocked model-spawning tool'); }",
               "text({ modelTools, blocked, execAvailable: typeof tools.exec_command === 'function' });",
             ].join("\n"),
           },

@@ -46,7 +46,7 @@ describe("Sideband tool policy", () => {
   });
 
   it("documents when ChatGPT should prefer direct tools versus Code Mode", () => {
-    expect(SIDEBAND_EXEC_GUIDANCE).toContain("Prefer a directly exposed Sideband native tool");
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("Prefer a directly exposed native tool");
     expect(SIDEBAND_EXEC_GUIDANCE).toContain("multiple native calls");
     expect(SIDEBAND_EXEC_GUIDANCE).toContain("ALL_TOOLS");
   });
@@ -56,8 +56,8 @@ describe("Sideband tool policy", () => {
 
     expect(wrapped).toContain("globalThis.ALL_TOOLS");
     expect(wrapped).toContain("new Proxy");
-    expect(wrapped).toContain("Sideband blocked model-spawning tool");
-    expect(wrapped).toContain("Sideband blocked test-harness tool");
+    expect(wrapped).toContain("Blocked model-spawning tool");
+    expect(wrapped).toContain("Blocked test-harness tool");
     expect(wrapped).toContain("codex_apps__test_harnes");
     expect(wrapped).toContain("text(await tools.exec_command({cmd: 'pwd'}));");
   });

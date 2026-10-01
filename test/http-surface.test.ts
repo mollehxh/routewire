@@ -92,7 +92,7 @@ describe("SidebandHttpSurface", () => {
     expect(listed.tools.map(tool => tool.name)).toEqual(["bootstrap", "exec"]);
     const execTool = listed.tools.find(tool => tool.name === "exec")!;
     expect(execTool.description).toContain("LIVE CODEX EXEC DESCRIPTION");
-    expect(execTool.description).toContain("Prefer a directly exposed Sideband native tool");
+    expect(execTool.description).toContain("Prefer a directly exposed native tool");
 
     const call = client.callTool({
       name: "exec",

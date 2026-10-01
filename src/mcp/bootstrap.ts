@@ -21,7 +21,7 @@ export const SIDEBAND_BOOTSTRAP_TOOL: BootstrapToolDefinition = {
   name: "bootstrap",
   title: "Load Codex context",
   description:
-    "Load the current safe model-facing Codex runtime/project context before ordinary substantive Sideband work. Returns model, environment, permissions, applicable AGENTS.md instructions, and the current native Codex skill catalog. It intentionally excludes hidden base/developer prompts, app/plugin instruction blocks, and session identifiers.",
+    "Load the current safe model-facing Codex runtime/project context before ordinary substantive work. Returns model, environment, permissions, applicable AGENTS.md instructions, and the current native Codex skill catalog. It intentionally excludes hidden base/developer prompts, app/plugin instruction blocks, and session identifiers.",
   inputSchema: bootstrapInputSchema,
 };
 

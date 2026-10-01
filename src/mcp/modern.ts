@@ -147,7 +147,7 @@ export async function handleModernMcpRequest(
         }
         result = await context.bridge.invokeExec(wrapExecCode(args.code));
       } else {
-        sendJson(res, 200, rpcError(id, -32602, `Unknown Sideband tool: ${name}`));
+        sendJson(res, 200, rpcError(id, -32602, `Unknown tool: ${name}`));
         return true;
       }
       sendJson(res, 200, rpcResult(id, {

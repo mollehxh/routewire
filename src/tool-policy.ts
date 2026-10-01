@@ -12,11 +12,11 @@ const MODEL_TOOL_DESCRIPTION_PATTERN =
 const TEST_HARNESS_TOOL_NAME_PATTERN = /(?:^|__)codex_apps__test_harnes[^_]*_/i;
 
 export const SIDEBAND_EXEC_GUIDANCE = [
-  "Sideband runs one real Codex turn and exposes its native Code Mode tools.",
-  "Prefer a directly exposed Sideband native tool for a single operation.",
+  "This server runs one real Codex turn and exposes its native Code Mode tools.",
+  "Prefer a directly exposed native tool for a single operation.",
   "Use exec when multiple native calls, batching, persistent JavaScript values, control flow, or an unprojected native Codex tool make Code Mode useful.",
   "Inside exec, native Codex tools are available through tools and described by ALL_TOOLS.",
-  "Sideband blocks nested tools that start or continue independent model/agent sessions and test-harness duplicates.",
+  "Nested tools that start or continue independent model/agent sessions and test-harness duplicates are blocked.",
 ].join(" ");
 
 export function isModelSpawningTool(tool: ToolMetadata): boolean {
@@ -73,10 +73,10 @@ export function wrapExecCode(code: string): string {
     get(target, property, receiver) {
       const name = String(property);
       if (__sidebandTestHarnessPattern.test(name)) {
-        throw new Error("Sideband blocked test-harness tool: " + name);
+        throw new Error("Blocked test-harness tool: " + name);
       }
       if (__sidebandBlockedNames.has(name) || __sidebandNamePattern.test(name)) {
-        throw new Error("Sideband blocked model-spawning tool: " + name);
+        throw new Error("Blocked model-spawning tool: " + name);
       }
       return Reflect.get(target, property, receiver);
     },

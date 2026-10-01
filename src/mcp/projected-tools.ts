@@ -72,7 +72,7 @@ const DEFINITIONS: ProjectionDefinition[] = [
   {
     ...exact("apply_patch", "Codex apply patch", applyPatchSchema),
     adaptDescription: description =>
-      `${description}\n\nSideband projection: pass the patch text in the \`patch\` argument.`,
+      `${description}\n\nProjection note: pass the patch text in the \`patch\` argument.`,
     mapArguments: arguments_ => applyPatchSchema.parse(arguments_).patch,
   },
   exact("view_image", "Codex view image", viewImageSchema),
