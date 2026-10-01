@@ -9,6 +9,10 @@ describe("parseCliOptions", () => {
       port: 0,
       model: "gpt-5.6-sol",
       dangerFullAccess: false,
+      codexHome: undefined,
+      tunnelId: undefined,
+      tunnelApiKeyFile: undefined,
+      tunnelClient: undefined,
     });
   });
 
@@ -21,6 +25,14 @@ describe("parseCliOptions", () => {
         "4321",
         "--model",
         "gpt-5.6-sol",
+        "--codex-home",
+        "/tmp/codex-home",
+        "--tunnel-id",
+        "tunnel_test",
+        "--tunnel-api-key-file",
+        "/tmp/tunnel-key",
+        "--tunnel-client",
+        "/tmp/tunnel-client",
         "--danger-full-access",
       ]),
     ).toEqual({
@@ -28,6 +40,10 @@ describe("parseCliOptions", () => {
       port: 4321,
       model: "gpt-5.6-sol",
       dangerFullAccess: true,
+      codexHome: "/tmp/codex-home",
+      tunnelId: "tunnel_test",
+      tunnelApiKeyFile: "/tmp/tunnel-key",
+      tunnelClient: "/tmp/tunnel-client",
     });
   });
 

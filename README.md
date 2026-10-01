@@ -2,8 +2,6 @@
 
 Sideband exposes the **live model-facing tool surface of a local Codex turn** as a local MCP server. ChatGPT can be the reasoning model while Codex executes its native tools.
 
-The current implementation is the local façade only. OpenAI Secure MCP Tunnel lifecycle management is not wired yet.
-
 ## Development
 
 ```bash
@@ -29,6 +27,44 @@ By default Sideband:
 - leaves Codex's normal permission/sandbox policy intact.
 
 The CLI prints the local MCP URL after Codex has exposed the tool surface.
+
+### OpenAI Secure MCP Tunnel
+
+When a tunnel ID is configured, the same Sideband process starts the official
+`tunnel-client`, waits for its local `/readyz` endpoint, and stops that child
+when Sideband shuts down:
+
+```bash
+export SIDEBAND_TUNNEL_ID=tunnel_...
+export CONTROL_PLANE_API_KEY=<runtime-key-with-tunnel-permissions>
+npm run dev
+```
+
+The runtime API key is read by `tunnel-client` from the environment and is not
+placed in Sideband's child-process argv. A file-backed runtime key is also
+supported:
+
+```bash
+npm run dev -- \
+  --tunnel-id tunnel_... \
+  --tunnel-api-key-file /path/to/runtime-api-key
+```
+
+`tunnel-client` binds the OpenAI-hosted tunnel to the local Sideband `/mcp`
+endpoint. When `--tunnel-client` is not supplied, Sideband downloads the pinned
+official `v0.0.15` platform ZIP from OpenAI's public release storage on first
+use, verifies the pinned `SHA256SUMS.txt` digest and the selected archive digest,
+and caches only the verified executable in the user's cache directory. Without
+a tunnel ID, Sideband stays local-only and prints that the tunnel is not
+configured.
+
+If Sideband itself is launched from a process that has a different `CODEX_HOME`
+(for example another Codex wrapper), point the child explicitly at the desired
+Codex installation state:
+
+```bash
+npm run dev -- --codex-home ~/.codex
+```
 
 ### Browser / Computer Use
 

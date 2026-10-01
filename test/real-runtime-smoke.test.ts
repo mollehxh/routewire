@@ -1,11 +1,11 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { startSideband } from "../src/runtime.js";
 
 const runRealCodex = process.env.SIDEBAND_REAL_CODEX === "1";
-const runRealBrowser = process.env.SIDEBAND_REAL_BROWSER === "1";
-const runRealCua = process.env.SIDEBAND_REAL_CUA === "1";
 
 describe.skipIf(!runRealCodex)("real Codex runtime", () => {
   it(
@@ -14,6 +14,8 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
       const runtime = await startSideband({
         cwd: process.cwd(),
         model: "gpt-5.6-sol",
+        codexHome:
+          process.env.SIDEBAND_REAL_CODEX_HOME ?? path.join(os.homedir(), ".codex"),
         dangerFullAccess: true,
         quietCodex: true,
       });
@@ -86,46 +88,42 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(discoveryText).toContain("cua_repl");
         expect(discoveryText).toContain('"modelTools":[]');
 
-        if (runRealBrowser) {
-          const browser = await client.callTool({
-            name: "exec",
-            arguments: {
-              code: [
-                "const nodeTool = ALL_TOOLS.find(x => x.name === 'mcp__node_repl__js') ?? ALL_TOOLS.find(x => /node_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /node_repl/i.test(x.name) && !/reset|add_node_module/i.test(x.name) && /browser|javascript|repl/i.test(String(x.description ?? '')));",
-                "if (!nodeTool) throw new Error('node_repl is not exposed');",
-                "const result = await tools[nodeTool.name]({ code: \"nodeRepl.write('SIDEBAND_BROWSER_OK')\", title: 'Sideband Browser smoke' });",
-                "text({ name: nodeTool.name, ok: result?.isError !== true, result });",
-              ].join("\n"),
-            },
-          });
-          const browserText = browser.content
-            .filter(item => item.type === "text")
-            .map(item => item.text)
-            .join("\n");
-          expect(browserText).toContain("node_repl");
-          expect(browserText).toContain("SIDEBAND_BROWSER_OK");
-          expect(browserText).toContain('"ok":true');
-        }
+        const browser = await client.callTool({
+          name: "exec",
+          arguments: {
+            code: [
+              "const nodeTool = ALL_TOOLS.find(x => x.name === 'mcp__node_repl__js') ?? ALL_TOOLS.find(x => /node_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /node_repl/i.test(x.name) && !/reset|add_node_module/i.test(x.name) && /browser|javascript|repl/i.test(String(x.description ?? '')));",
+              "if (!nodeTool) throw new Error('node_repl is not exposed');",
+              "const result = await tools[nodeTool.name]({ code: \"nodeRepl.write('SIDEBAND_BROWSER_OK')\", title: 'Sideband Browser smoke' });",
+              "text({ name: nodeTool.name, ok: result?.isError !== true, result });",
+            ].join("\n"),
+          },
+        });
+        const browserText = browser.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        expect(browserText).toContain("node_repl");
+        expect(browserText).toContain("SIDEBAND_BROWSER_OK");
+        expect(browserText).toContain('"ok":true');
 
-        if (runRealCua) {
-          const cua = await client.callTool({
-            name: "exec",
-            arguments: {
-              code: [
-                "const cuaTool = ALL_TOOLS.find(x => /cua_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /computer_repl/i.test(x.name) && /cua|computer use/i.test(String(x.description ?? '')));",
-                "if (!cuaTool) throw new Error('cua_repl is not exposed');",
-                "const result = await tools[cuaTool.name]({ code: \"await cua.getState();\", title: 'Sideband CUA smoke', timeout_ms: 10000 });",
-                "text({ name: cuaTool.name, ok: result?.isError !== true });",
-              ].join("\n"),
-            },
-          });
-          const cuaText = cua.content
-            .filter(item => item.type === "text")
-            .map(item => item.text)
-            .join("\n");
-          expect(cuaText).toContain("cua_repl");
-          expect(cuaText).toContain('"ok":true');
-        }
+        const cua = await client.callTool({
+          name: "exec",
+          arguments: {
+            code: [
+              "const cuaTool = ALL_TOOLS.find(x => /cua_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /computer_repl/i.test(x.name) && /cua|computer use/i.test(String(x.description ?? '')));",
+              "if (!cuaTool) throw new Error('cua_repl is not exposed');",
+              "const result = await tools[cuaTool.name]({ code: \"await cua.getState();\", title: 'Sideband CUA smoke', timeout_ms: 10000 });",
+              "text({ name: cuaTool.name, ok: result?.isError !== true });",
+            ].join("\n"),
+          },
+        });
+        const cuaText = cua.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        expect(cuaText).toContain("cua_repl");
+        expect(cuaText).toContain('"ok":true');
       } finally {
         await client.close().catch(() => undefined);
         await runtime.close();

@@ -1,11 +1,17 @@
 import spawn from "cross-spawn";
 
+import {
+  forceTerminateProcessTree,
+  shouldCreateProcessGroup,
+  terminateProcessTree,
+} from "../process-tree.js";
 import { buildCodexArgs } from "./command.js";
 
 export interface StartCodexProcessOptions {
   cwd: string;
   model: string;
   providerBaseUrl: string;
+  codexHome?: string;
   dangerFullAccess?: boolean;
   quiet?: boolean;
   command?: string;
@@ -20,6 +26,7 @@ export interface CodexExit {
 export interface CodexProcessHandle {
   exited: Promise<CodexExit>;
   terminate(): void;
+  forceTerminate(): void;
 }
 
 export function startCodexProcess(options: StartCodexProcessOptions): CodexProcessHandle {
@@ -29,11 +36,15 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
     dangerFullAccess: options.dangerFullAccess,
   });
 
+  const env = { ...process.env };
+  if (options.codexHome) env.CODEX_HOME = options.codexHome;
+
   const child = spawn(options.command ?? "codex", args, {
     cwd: options.cwd,
-    env: { ...process.env },
+    env,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
+    detached: shouldCreateProcessGroup(),
   });
 
   if (!options.quiet) {
@@ -59,7 +70,10 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
   return {
     exited,
     terminate() {
-      if (child.exitCode === null && child.signalCode === null) child.kill();
+      terminateProcessTree(child);
+    },
+    forceTerminate() {
+      forceTerminateProcessTree(child);
     },
   };
 }
