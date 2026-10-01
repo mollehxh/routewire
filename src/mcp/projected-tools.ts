@@ -86,14 +86,30 @@ const DEFINITIONS: ProjectionDefinition[] = [
     "Add Node module directory",
     addNodeModuleDirSchema,
   ),
-  suffix("cua_repl", "Codex Computer Use REPL", replSchema, "cua_repl__js", true),
-  suffix("cua_repl_reset", "Reset Codex Computer Use REPL", emptySchema, "cua_repl__js_reset", true),
+  {
+    ...suffix("cua_repl", "Codex Computer Use REPL", replSchema, "cua_repl__js", true),
+    adaptDescription: () =>
+      "Execute JavaScript in the persistent native Computer Use runtime for direct UI tasks. Prefer a more specific skill, connector, API, or CLI when one applies. For browser work, load and follow the applicable Browser/Chrome skill instead of using this tool as a shortcut. For direct non-browser Computer Use, initialize with `await cua.getState();` and read the returned runtime documentation before further calls. Use only APIs described by that runtime documentation.",
+  },
+  {
+    ...suffix(
+      "cua_repl_reset",
+      "Reset Codex Computer Use REPL",
+      emptySchema,
+      "cua_repl__js_reset",
+      true,
+    ),
+    adaptDescription: () =>
+      "Reset the persistent Computer Use JavaScript runtime and discard its JavaScript bindings. This does not close browser tabs or native apps or erase their state. The next direct Computer Use call must initialize the runtime and read its returned documentation again.",
+  },
   suffix(
     "cua_repl_add_node_module_dir",
     "Add Computer Use Node module directory",
     addNodeModuleDirSchema,
     "cua_repl__js_add_node_module_dir",
     true,
+    () =>
+      "Add an absolute node_modules directory to Computer Use runtime package resolution. The directory remains available after the JavaScript runtime is reset.",
   ),
 ];
 
@@ -118,12 +134,14 @@ function suffix(
   inputSchema: ZodType,
   nativeSuffix: string,
   exposeNativeName = false,
+  adaptDescription?: (description: string) => string,
 ): ProjectionDefinition {
   return {
     name,
     title,
     inputSchema,
     exposeNativeName,
+    adaptDescription,
     resolveNativeName: inventory => chooseNativeBySuffix(inventory, nativeSuffix),
   };
 }

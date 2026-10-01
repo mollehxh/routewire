@@ -50,7 +50,17 @@ describe("projected Codex native tools", () => {
       "mcp__codex_apps__fkn_codex_mcp__cua_repl__js",
     );
     expect(projected.find(tool => tool.name === "mcp__node_repl__js")?.description).toBe("NODE");
-    expect(projected.find(tool => tool.name.endsWith("cua_repl__js"))?.description).toBe("CUA");
+    const cua = projected.find(tool => tool.name.endsWith("cua_repl__js"));
+    expect(cua?.description).toContain("Browser/Chrome skill");
+    expect(cua?.description).toContain("await cua.getState();");
+    expect(cua?.description).not.toContain("CUA");
+    expect(cua?.description.length).toBeLessThan(600);
+    expect(projected.find(tool => tool.name.endsWith("cua_repl__js_reset"))?.description).toContain(
+      "does not close browser tabs or native apps",
+    );
+    expect(
+      projected.find(tool => tool.name.endsWith("cua_repl__js_add_node_module_dir"))?.description,
+    ).toContain("node_modules directory");
     expect(projected.some(tool => /goal|mail/i.test(tool.name))).toBe(false);
   });
 
