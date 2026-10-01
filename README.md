@@ -2,6 +2,14 @@
 
 Sideband exposes the **live model-facing tool surface of a local Codex turn** as a local MCP server. ChatGPT can be the reasoning model while Codex executes its native tools.
 
+## ChatGPT Project Instructions
+
+For Codex-style agent behavior in ChatGPT, copy the contents of
+[`CHATGPT_PROJECT_INSTRUCTIONS.md`](./CHATGPT_PROJECT_INSTRUCTIONS.md) into the
+ChatGPT Project Instructions field. That file contains stable agent behavior;
+Sideband's MCP server instructions provide the current runtime preflight,
+bootstrap, skill-loading, and tool-selection workflow dynamically.
+
 ## Development
 
 ```bash
