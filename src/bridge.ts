@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
 import {
+  extractCodexOperationalContext,
+  type CodexOperationalContext,
+} from "./provider/context.js";
+import {
   bridgeResultFromCodexOutput,
   extractCustomToolCallOutput,
   extractExecToolSpec,
@@ -33,6 +37,7 @@ export class CodexTurnBridge {
   #pendingModelReply?: ProviderResponder;
   #pendingModelRequestFingerprint?: string;
   #activeCall?: ActiveCall;
+  #operationalContext?: CodexOperationalContext;
   #callCounter = 0;
   #closed = false;
 
@@ -48,6 +53,13 @@ export class CodexTurnBridge {
     return this.#readyPromise;
   }
 
+  operationalContext(): CodexOperationalContext {
+    if (!this.#operationalContext) {
+      throw new Error("Codex operational context is not available yet");
+    }
+    return structuredClone(this.#operationalContext);
+  }
+
   acceptModelRequest(body: unknown, respond: ProviderResponder): void {
     if (this.#closed) throw new Error("Sideband bridge is closed");
     if (!isRecord(body)) throw new Error("Codex provider request must be an object");
@@ -61,6 +73,21 @@ export class CodexTurnBridge {
     if (spec && !this.#execSpec) {
       this.#execSpec = spec;
       this.#resolveReady(spec);
+    }
+
+    const operationalContext = extractCodexOperationalContext(body, this.#model);
+    if (operationalContext) {
+      this.#operationalContext = this.#operationalContext
+        ? {
+            model: operationalContext.model,
+            environment: operationalContext.environment ?? this.#operationalContext.environment,
+            permissions: operationalContext.permissions ?? this.#operationalContext.permissions,
+            projectInstructions:
+              operationalContext.projectInstructions.length > 0
+                ? operationalContext.projectInstructions
+                : this.#operationalContext.projectInstructions,
+          }
+        : operationalContext;
     }
 
     const requestFingerprint = modelRequestFingerprint(body);

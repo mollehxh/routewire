@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
@@ -26,6 +27,26 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
   const server = new McpServer(
     { name: "sideband", version: "0.0.0" },
     { instructions: SIDEBAND_MCP_INSTRUCTIONS },
+  );
+
+  server.registerTool(
+    SIDEBAND_BOOTSTRAP_TOOL.name,
+    {
+      title: SIDEBAND_BOOTSTRAP_TOOL.title,
+      description: SIDEBAND_BOOTSTRAP_TOOL.description,
+      inputSchema: SIDEBAND_BOOTSTRAP_TOOL.inputSchema,
+    },
+    async (): Promise<CallToolResult> => {
+      try {
+        const result = await invokeBootstrap(options.bridge, options.nativeSkillTools);
+        return { content: result.content, isError: result.isError };
+      } catch (error) {
+        return {
+          content: [{ type: "text", text: errorMessage(error) }],
+          isError: true,
+        };
+      }
+    },
   );
 
   for (const tool of options.projectedTools ?? []) {

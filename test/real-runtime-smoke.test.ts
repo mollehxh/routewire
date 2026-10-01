@@ -30,6 +30,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
 
         const listed = await client.listTools();
         const listedNames = listed.tools.map(tool => tool.name);
+        expect(listedNames).toContain("bootstrap");
         expect(listedNames).toContain("exec");
         expect(listedNames).toContain("exec_command");
         expect(listedNames).toContain("apply_patch");
@@ -44,6 +45,25 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(listed.tools.find(tool => tool.name === "mcp__node_repl__js")?.description).toContain(
           "persistent `node_repl`",
         );
+
+        const bootstrapResult = await client.callTool({ name: "bootstrap", arguments: {} });
+        expect(bootstrapResult.isError).not.toBe(true);
+        const bootstrapText = bootstrapResult.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        const bootstrapPayload = JSON.parse(bootstrapText) as {
+          model: string;
+          environment: { cwd?: string; workspace_roots?: string[] } | null;
+          project_instructions: Array<{ scope: string; content: string }>;
+          skills_available: boolean;
+          skills: Array<{ name: string; description: string }>;
+        };
+        expect(bootstrapPayload.model).toBe("gpt-5.6-sol");
+        expect(bootstrapPayload.environment?.cwd).toBe(process.cwd());
+        expect(bootstrapPayload.environment?.workspace_roots).toContain(process.cwd());
+        expect(bootstrapPayload.skills_available).toBe(true);
+        expect(bootstrapPayload.skills.length).toBeGreaterThan(0);
 
         const skillsResult = await client.callTool({ name: "skills", arguments: {} });
         expect(skillsResult.isError).not.toBe(true);

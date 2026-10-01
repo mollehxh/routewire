@@ -9,6 +9,11 @@ export interface NativeSkillTools {
   getName: string;
 }
 
+export interface CodexSkillSummary {
+  name: string;
+  description: string;
+}
+
 export interface SidebandSkillToolDefinition {
   name: "skills" | "get_skill";
   title: string;
@@ -110,7 +115,16 @@ async function invokeSkills(
   nativeTools: NativeSkillTools,
   args: z.infer<typeof skillsInputSchema>,
 ): Promise<BridgeCallResult> {
-  const skills: Array<{ name: string; description: string }> = [];
+  const skills = await loadNativeSkillCatalog(bridge, nativeTools, args.force_reload === true);
+  return textResult({ skills });
+}
+
+export async function loadNativeSkillCatalog(
+  bridge: CodexTurnBridge,
+  nativeTools: NativeSkillTools,
+  forceReload = false,
+): Promise<CodexSkillSummary[]> {
+  const skills: CodexSkillSummary[] = [];
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
   let first = true;
@@ -118,7 +132,7 @@ async function invokeSkills(
   while (offset < total) {
     const code = `
 const __sidebandNative = await tools[${JSON.stringify(nativeTools.listName)}]({
-  force_reload: ${first && args.force_reload === true ? "true" : "false"},
+  force_reload: ${first && forceReload ? "true" : "false"},
 });
 if (__sidebandNative?.isError === true) {
   const __sidebandMessage = (__sidebandNative.content ?? []).filter(x => x?.type === "text").map(x => x.text).join("\\n");
@@ -155,7 +169,7 @@ text(${JSON.stringify(PAYLOAD_START)} + JSON.stringify(__sidebandPayload) + ${JS
     first = false;
   }
 
-  return textResult({ skills });
+  return skills;
 }
 
 async function invokeGetSkill(

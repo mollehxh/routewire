@@ -4,6 +4,11 @@ import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { isRecord } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import {
+  bootstrapToolJsonSchema,
+  invokeBootstrap,
+  SIDEBAND_BOOTSTRAP_TOOL,
+} from "./bootstrap.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
@@ -93,6 +98,7 @@ export async function handleModernMcpRequest(
     sendJson(res, 200, rpcResult(id, {
       resultType: "complete",
       tools: [
+        modernBootstrapTool(),
         ...(context.projectedTools ?? []).map(modernProjectedTool),
         ...(context.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS.map(modernSkillTool) : []),
         modernExecTool(context.execSpec),
@@ -123,7 +129,9 @@ export async function handleModernMcpRequest(
         ? SIDEBAND_SKILL_TOOL_DEFINITIONS.find(tool => tool.name === name)
         : undefined;
       let result;
-      if (projected) {
+      if (name === SIDEBAND_BOOTSTRAP_TOOL.name) {
+        result = await invokeBootstrap(context.bridge, context.nativeSkillTools);
+      } else if (projected) {
         result = await invokeProjectedNativeTool(context.bridge, projected, args);
       } else if (skillDefinition && context.nativeSkillTools) {
         result = await invokeSidebandSkillTool(
@@ -161,6 +169,15 @@ export async function handleModernMcpRequest(
 
   sendJson(res, 404, rpcError(id, -32601, `Method not found: ${body.method}`));
   return true;
+}
+
+function modernBootstrapTool(): Record<string, unknown> {
+  return {
+    name: SIDEBAND_BOOTSTRAP_TOOL.name,
+    title: SIDEBAND_BOOTSTRAP_TOOL.title,
+    description: SIDEBAND_BOOTSTRAP_TOOL.description,
+    inputSchema: bootstrapToolJsonSchema(),
+  };
 }
 
 function modernSkillTool(

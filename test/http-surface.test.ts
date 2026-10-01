@@ -34,6 +34,14 @@ function initialRequest() {
           },
         ],
       },
+      {
+        type: "message",
+        role: "user",
+        content: [{
+          type: "input_text",
+          text: '<environment_context><cwd>/repo</cwd><shell>zsh</shell><current_date>2026-10-01</current_date><timezone>Europe/Moscow</timezone><filesystem><workspace_roots><root>/repo</root></workspace_roots><permission_profile type="managed"><file_system type="restricted" /></permission_profile></filesystem></environment_context>',
+        }],
+      },
     ],
   };
 }
@@ -81,10 +89,10 @@ describe("SidebandHttpSurface", () => {
     closers.push(async () => client.close());
 
     const listed = await client.listTools();
-    expect(listed.tools).toHaveLength(1);
-    expect(listed.tools[0]).toMatchObject({ name: "exec" });
-    expect(listed.tools[0].description).toContain("LIVE CODEX EXEC DESCRIPTION");
-    expect(listed.tools[0].description).toContain("Prefer a directly exposed Sideband native tool");
+    expect(listed.tools.map(tool => tool.name)).toEqual(["bootstrap", "exec"]);
+    const execTool = listed.tools.find(tool => tool.name === "exec")!;
+    expect(execTool.description).toContain("LIVE CODEX EXEC DESCRIPTION");
+    expect(execTool.description).toContain("Prefer a directly exposed Sideband native tool");
 
     const call = client.callTool({
       name: "exec",
@@ -195,6 +203,12 @@ describe("SidebandHttpSurface", () => {
         resultType: "complete",
         tools: [
           {
+            name: "bootstrap",
+            inputSchema: {
+              type: "object",
+            },
+          },
+          {
             name: "exec_command",
             description: "LIVE DIRECT EXEC DESCRIPTION",
             inputSchema: {
@@ -227,6 +241,62 @@ describe("SidebandHttpSurface", () => {
         cacheScope: "private",
       },
     });
+
+    const bootstrapCallResponse = fetch(surface.mcpUrl, {
+      method: "POST",
+      headers: modernHeaders("tools/call", "bootstrap"),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "bootstrap-call-1",
+        method: "tools/call",
+        params: {
+          name: "bootstrap",
+          arguments: {},
+          _meta: meta,
+        },
+      }),
+    });
+
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    const bootstrapReply = providerReply as ProviderReply | undefined;
+    if (!bootstrapReply || bootstrapReply.kind !== "tool_call") {
+      throw new Error("missing bootstrap skill-catalog call");
+    }
+    expect(bootstrapReply.input).toContain(nativeSkillTools.listName);
+    bridge.acceptModelRequest(
+      {
+        ...initialRequest(),
+        input: [
+          ...initialRequest().input,
+          {
+            type: "custom_tool_call_output",
+            call_id: bootstrapReply.callId,
+            output: [{
+              type: "input_text",
+              text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":1,"skills":[{"name":"alpha","description":"A"}]}__SIDEBAND_SKILL_PAYLOAD_END__',
+            }],
+          },
+        ],
+      },
+      reply => {
+        providerReply = reply;
+      },
+    );
+
+    const bootstrapCall = await bootstrapCallResponse;
+    expect(bootstrapCall.status).toBe(200);
+    const bootstrapPayload = await bootstrapCall.json() as any;
+    const bootstrapText = bootstrapPayload.result.content[0].text as string;
+    expect(JSON.parse(bootstrapText)).toMatchObject({
+      model: "gpt-5.6-sol",
+      environment: {
+        cwd: "/repo",
+        shell: "zsh",
+      },
+      skills_available: true,
+      skills: [{ name: "alpha", description: "A" }],
+    });
+    providerReply = undefined;
 
     const skillsCallResponse = fetch(surface.mcpUrl, {
       method: "POST",
