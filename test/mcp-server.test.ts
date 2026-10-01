@@ -2,6 +2,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
+import { SIDEBAND_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
 import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
 import { createSidebandMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
@@ -60,6 +61,10 @@ describe("Sideband MCP server", () => {
 
     await server.connect(serverTransport);
     await client.connect(clientTransport);
+
+    expect(client.getInstructions()).toBe(SIDEBAND_MCP_INSTRUCTIONS);
+    expect(client.getInstructions()).toContain("$skills");
+    expect(client.getInstructions()).toContain("get_skill");
 
     const listed = await client.listTools();
     expect(listed.tools).toHaveLength(1);

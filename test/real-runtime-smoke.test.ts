@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { SIDEBAND_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
 import { startSideband } from "../src/runtime.js";
 
 const runRealCodex = process.env.SIDEBAND_REAL_CODEX === "1";
@@ -23,6 +24,9 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
       const client = new Client({ name: "sideband-real-smoke", version: "0.0.0" });
       try {
         await client.connect(new StreamableHTTPClientTransport(new URL(runtime.mcpUrl)));
+
+        expect(client.getInstructions()).toBe(SIDEBAND_MCP_INSTRUCTIONS);
+        expect(client.getInstructions()).toContain("$skills");
 
         const listed = await client.listTools();
         const listedNames = listed.tools.map(tool => tool.name);

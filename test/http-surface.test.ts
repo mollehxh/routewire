@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
 import { SidebandHttpSurface } from "../src/http-surface.js";
+import { SIDEBAND_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
 import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
 import { createSidebandMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
@@ -170,6 +171,7 @@ describe("SidebandHttpSurface", () => {
         resultType: "complete",
         supportedVersions: ["2026-07-28"],
         capabilities: { tools: {} },
+        instructions: SIDEBAND_MCP_INSTRUCTIONS,
         ttlMs: 0,
         cacheScope: "private",
       },

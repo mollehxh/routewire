@@ -4,6 +4,7 @@ import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { isRecord } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
   projectedToolJsonSchema,
@@ -80,6 +81,7 @@ export async function handleModernMcpRequest(
       resultType: "complete",
       supportedVersions: [MODERN_MCP_PROTOCOL_VERSION],
       capabilities: { tools: {} },
+      instructions: SIDEBAND_MCP_INSTRUCTIONS,
       ttlMs: 0,
       cacheScope: "private",
       _meta: serverMeta(),

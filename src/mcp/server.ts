@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
   type ProjectedNativeTool,
@@ -22,7 +23,10 @@ export interface CreateSidebandMcpServerOptions {
 }
 
 export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions): McpServer {
-  const server = new McpServer({ name: "sideband", version: "0.0.0" });
+  const server = new McpServer(
+    { name: "sideband", version: "0.0.0" },
+    { instructions: SIDEBAND_MCP_INSTRUCTIONS },
+  );
 
   for (const tool of options.projectedTools ?? []) {
     server.registerTool(
