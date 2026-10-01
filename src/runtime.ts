@@ -61,7 +61,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       }),
     ]);
 
-    surface.setMcpServer(createSidebandMcpServer({ bridge, execSpec }));
+    surface.setMcpServer(createSidebandMcpServer({ bridge, execSpec }), execSpec);
 
     const codexExitWatch = codex.exited.then(exit => {
       if (!closing) {

@@ -110,4 +110,37 @@ describe("Responses-compatible provider HTTP surface", () => {
     expect(secondSse).toContain('"type":"message"');
     expect(secondSse).toContain("test complete");
   });
+
+  it("returns a valid response.failed stream when bridge state rejects a provider request", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    const server = createServer(async (req, res) => {
+      if (!(await handleProviderHttpRequest(req, res, bridge))) {
+        res.writeHead(404).end();
+      }
+    });
+    servers.push(server);
+    const baseUrl = await listen(server);
+
+    const firstResponse = fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(modelRequest()),
+    });
+    await bridge.ready();
+
+    const rejected = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(modelRequest()),
+    });
+    const rejectedSse = await rejected.text();
+    expect(rejected.status).toBe(200);
+    expect(rejected.headers.get("content-type")).toContain("text/event-stream");
+    expect(rejectedSse).toContain("event: response.failed");
+    expect(rejectedSse).toContain('"code":"sideband_bridge_error"');
+    expect(rejectedSse).toContain("second model request");
+
+    bridge.close("test complete");
+    await firstResponse;
+  });
 });

@@ -93,3 +93,26 @@ That live smoke verifies all three paths in the same persistent Codex turn:
 - the real `cua_repl` Computer Use runtime discovered from `ALL_TOOLS`.
 
 The test resolves the runtime tool names dynamically instead of assuming a fixed MCP namespace.
+
+### Debugging provider traffic
+
+If a live Codex turn fails, enable metadata-only provider diagnostics:
+
+```bash
+SIDEBAND_DEBUG=1 npm run dev
+```
+
+PowerShell:
+
+```powershell
+$env:SIDEBAND_DEBUG = "1"
+node .\dist\cli.js --codex-home "$env:USERPROFILE\.codex" --danger-full-access
+```
+
+The debug log prints provider request sequence numbers, request kind, input item
+types, and Sideband reply kind. It does not log prompts, `exec` source code, tool
+outputs, or tunnel credentials.
+
+Sideband serves both the legacy MCP handshake used by current local SDK clients
+and the stateless MCP `2026-07-28` HTTP surface used by current ChatGPT tunnel
+traffic (`server/discover`, `tools/list`, and `tools/call`).

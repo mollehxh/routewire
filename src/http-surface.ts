@@ -8,7 +8,9 @@ import {
 import type { McpServer } from "@modelcontextprotocol/server";
 
 import type { CodexTurnBridge } from "./bridge.js";
+import { handleModernMcpRequest } from "./mcp/modern.js";
 import { handleProviderHttpRequest } from "./provider/http.js";
+import type { ExecToolSpec } from "./provider/protocol.js";
 
 export interface SidebandHttpSurfaceOptions {
   bridge: CodexTurnBridge;
@@ -22,6 +24,7 @@ export class SidebandHttpSurface {
   readonly #requestedPort: number;
   #server?: Server;
   #mcpServer?: McpServer;
+  #execSpec?: ExecToolSpec;
   #port?: number;
 
   constructor(options: SidebandHttpSurfaceOptions) {
@@ -46,8 +49,9 @@ export class SidebandHttpSurface {
     return `http://${formatHostForUrl(this.#host)}:${this.#port}`;
   }
 
-  setMcpServer(server: McpServer): void {
+  setMcpServer(server: McpServer, execSpec: ExecToolSpec): void {
     this.#mcpServer = server;
+    this.#execSpec = execSpec;
   }
 
   async start(): Promise<void> {
@@ -68,9 +72,18 @@ export class SidebandHttpSurface {
           return;
         }
 
-        if (!this.#mcpServer) {
+        if (!this.#mcpServer || !this.#execSpec) {
           res.writeHead(503, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: "Codex tool surface is not ready" }));
+          return;
+        }
+
+        if (
+          await handleModernMcpRequest(req, res, {
+            bridge: this.#bridge,
+            execSpec: this.#execSpec,
+          })
+        ) {
           return;
         }
 
@@ -117,6 +130,7 @@ export class SidebandHttpSurface {
   async close(): Promise<void> {
     const mcpServer = this.#mcpServer;
     this.#mcpServer = undefined;
+    this.#execSpec = undefined;
     if (mcpServer) await mcpServer.close();
 
     const server = this.#server;

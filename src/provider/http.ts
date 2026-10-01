@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ProviderReply } from "./protocol.js";
 
+let providerRequestSequence = 0;
+
 export async function handleProviderHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -25,6 +27,13 @@ export async function handleProviderHttpRequest(
     return true;
   }
 
+  const requestId = ++providerRequestSequence;
+  if (providerDebugEnabled()) {
+    process.stderr.write(
+      `[sideband] provider request #${requestId}: ${JSON.stringify(providerRequestSummary(body))}\n`,
+    );
+  }
+
   res.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-cache",
@@ -41,6 +50,11 @@ export async function handleProviderHttpRequest(
   const finish = (reply: ProviderReply) => {
     clearInterval(keepAlive);
     if (res.writableEnded) return;
+    if (providerDebugEnabled()) {
+      process.stderr.write(
+        `[sideband] provider reply #${requestId}: ${JSON.stringify(providerReplySummary(reply))}\n`,
+      );
+    }
     for (const event of replyEvents(reply)) {
       res.write(`event: ${event.type}\n`);
       res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -52,7 +66,24 @@ export async function handleProviderHttpRequest(
     bridge.acceptModelRequest(body, finish);
   } catch (error) {
     clearInterval(keepAlive);
-    res.destroy(error instanceof Error ? error : new Error(String(error)));
+    const message = errorMessage(error);
+    logProviderError(body, message);
+    if (!res.writableEnded) {
+      const responseId = `resp_sideband_error_${Date.now()}`;
+      const failed = {
+        type: "response.failed",
+        response: {
+          id: responseId,
+          error: {
+            code: "sideband_bridge_error",
+            message,
+          },
+        },
+      };
+      res.write(`event: response.failed\n`);
+      res.write(`data: ${JSON.stringify(failed)}\n\n`);
+      res.end();
+    }
   }
 
   return true;
@@ -134,4 +165,55 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function logProviderError(body: unknown, message: string): void {
+  const summary = providerRequestSummary(body);
+  process.stderr.write(
+    `[sideband] provider bridge error: ${message}; ${JSON.stringify(summary)}\n`,
+  );
+}
+
+function providerRequestSummary(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { bodyType: typeof body };
+  const record = body as Record<string, unknown>;
+  const input = Array.isArray(record.input) ? record.input : [];
+  const inputTypes = input.map(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return typeof item;
+    const type = (item as Record<string, unknown>).type;
+    return typeof type === "string" ? type : "object";
+  });
+  let requestKind: unknown;
+  const metadata = record.client_metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const raw = (metadata as Record<string, unknown>)["x-codex-turn-metadata"];
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        requestKind = parsed.request_kind;
+      } catch {
+        requestKind = "unparseable";
+      }
+    }
+  }
+  return {
+    model: record.model,
+    requestKind,
+    inputTypes,
+  };
+}
+
+function providerReplySummary(reply: ProviderReply): Record<string, unknown> {
+  return reply.kind === "tool_call"
+    ? {
+        kind: reply.kind,
+        callId: reply.callId,
+        namespace: reply.namespace,
+        name: reply.name,
+      }
+    : { kind: reply.kind };
+}
+
+function providerDebugEnabled(): boolean {
+  return process.env.SIDEBAND_DEBUG === "1";
 }
