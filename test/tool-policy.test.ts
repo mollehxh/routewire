@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compactExecDescription,
   isModelSpawningTool,
   isSidebandBlockedTool,
   SIDEBAND_EXEC_GUIDANCE,
@@ -49,6 +50,25 @@ describe("Sideband tool policy", () => {
     expect(SIDEBAND_EXEC_GUIDANCE).toContain("Prefer a directly exposed native tool");
     expect(SIDEBAND_EXEC_GUIDANCE).toContain("multiple native calls");
     expect(SIDEBAND_EXEC_GUIDANCE).toContain("ALL_TOOLS");
+  });
+
+  it("removes duplicated shared MCP types and nested tool declarations from exec descriptions", () => {
+    const description = [
+      "Run JavaScript code to orchestrate/compose tool calls",
+      "- ALL_TOOLS contains enabled nested tools.",
+      "",
+      "Shared MCP Types:",
+      "```ts",
+      "type ContentBlock = unknown;",
+      "```",
+      "",
+      "### `exec_command`",
+      "nested declaration",
+    ].join("\n");
+
+    expect(compactExecDescription(description)).toBe(
+      "Run JavaScript code to orchestrate/compose tool calls\n- ALL_TOOLS contains enabled nested tools.",
+    );
   });
 
   it("wraps Code Mode cells with a dynamic tools/ALL_TOOLS policy before user code", () => {

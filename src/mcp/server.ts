@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import type { CodexTurnBridge } from "../bridge.js";
 import { cleanCodeModeResult, type ExecToolSpec } from "../provider/protocol.js";
-import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import {
+  compactExecDescription,
+  SIDEBAND_EXEC_GUIDANCE,
+  wrapExecCode,
+} from "../tool-policy.js";
 import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
@@ -100,13 +104,13 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
     "exec",
     {
       title: "Codex exec",
-      description: `${options.execSpec.description}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
+      description: `${compactExecDescription(options.execSpec.description)}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
       inputSchema: z.object({
         code: z
           .string()
           .min(1)
           .describe(
-            `Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. ${SIDEBAND_EXEC_GUIDANCE}`,
+            "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences.",
           ),
       }),
     },

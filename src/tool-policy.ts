@@ -19,6 +19,15 @@ export const SIDEBAND_EXEC_GUIDANCE = [
   "Nested tools that start or continue independent model/agent sessions and test-harness duplicates are blocked.",
 ].join(" ");
 
+export function compactExecDescription(description: string): string {
+  const sharedTypesIndex = description.indexOf("\nShared MCP Types:");
+  const nestedToolIndex = description.search(/\n### `[^`]+`\n/);
+  const cutAt = [sharedTypesIndex, nestedToolIndex]
+    .filter(index => index >= 0)
+    .reduce((minimum, index) => Math.min(minimum, index), description.length);
+  return description.slice(0, cutAt).trimEnd();
+}
+
 export function isModelSpawningTool(tool: ToolMetadata): boolean {
   return (
     MODEL_TOOL_NAME_PATTERN.test(tool.name) ||

@@ -3,7 +3,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { cleanCodeModeResult, isRecord } from "../provider/protocol.js";
-import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import {
+  compactExecDescription,
+  SIDEBAND_EXEC_GUIDANCE,
+  wrapExecCode,
+} from "../tool-policy.js";
 import {
   bootstrapToolJsonSchema,
   invokeBootstrap,
@@ -204,14 +208,14 @@ function modernExecTool(execSpec: ExecToolSpec): Record<string, unknown> {
   return {
     name: "exec",
     title: "Codex exec",
-    description: `${execSpec.description}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
+    description: `${compactExecDescription(execSpec.description)}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
     inputSchema: {
       type: "object",
       properties: {
         code: {
           type: "string",
           minLength: 1,
-          description: `Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. ${SIDEBAND_EXEC_GUIDANCE}`,
+          description: "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences.",
         },
       },
       required: ["code"],
