@@ -60,10 +60,24 @@ describe("projected Codex native tools", () => {
     ]);
 
     expect(tool.name).toBe("apply_patch");
-    expect(tool.description).toContain("FREEFORM PATCH");
+    expect(tool.description).not.toContain("FREEFORM");
+    expect(tool.description).toContain("apply_patch grammar");
     expect(tool.description).toContain("patch");
     expect(tool.mapArguments({ patch: "*** Begin Patch\n*** End Patch" })).toBe(
       "*** Begin Patch\n*** End Patch",
     );
+  });
+
+  it("removes duplicated exec declarations from projected descriptions", () => {
+    const [tool] = selectProjectedNativeTools([
+      {
+        name: "exec_command",
+        description:
+          "Runs a command in a PTY.\n\nexec tool declaration:\n```ts\ndeclare const tools: { exec_command(args: unknown): Promise<unknown>; };\n```",
+      },
+    ]);
+
+    expect(tool.description).toBe("Runs a command in a PTY.");
+    expect(tool.description).not.toContain("exec tool declaration");
   });
 });

@@ -28,6 +28,18 @@ export interface BridgeCallResult {
   isError: boolean;
 }
 
+export function cleanCodeModeResult(result: BridgeCallResult): BridgeCallResult {
+  const content = [...result.content];
+  const first = content[0];
+  if (
+    first?.type === "text" &&
+    /^Script (?:completed|failed)\nWall time [^\n]+\nOutput:$/.test(first.text.trim())
+  ) {
+    content.shift();
+  }
+  return { content, isError: result.isError };
+}
+
 export function extractExecToolSpec(body: unknown): ExecToolSpec | undefined {
   if (!isRecord(body) || !Array.isArray(body.input)) return undefined;
 

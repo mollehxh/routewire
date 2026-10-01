@@ -89,9 +89,9 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           .join("\n");
         const skillPayload = JSON.parse(skillText) as {
           skills: Array<{ name: string; content: string }>;
-          errors: unknown[];
+          errors?: unknown[];
         };
-        expect(skillPayload.errors).toEqual([]);
+        expect(skillPayload.errors).toBeUndefined();
         expect(skillPayload.skills[0].name).toBe(skillName);
         expect(skillPayload.skills[0].content).toContain("---");
 
@@ -104,6 +104,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           .map(item => item.text)
           .join("\n");
         expect(directExecText).toContain("SIDEBAND_DIRECT_EXEC_OK");
+        expect(directExecText).not.toContain("Script completed");
 
         const policy = await client.callTool({
           name: "exec",
@@ -176,6 +177,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           .map(item => item.text)
           .join("\n");
         expect(browserText).toContain("SIDEBAND_BROWSER_OK");
+        expect(browserText).not.toContain("Script completed");
 
         const cua = await client.callTool({
           name: cuaToolName!,
@@ -191,6 +193,8 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           .join("\n");
         expect(cua.isError).not.toBe(true);
         expect(cuaText.length).toBeGreaterThan(0);
+        expect(cuaText).not.toContain("Script completed");
+        expect(cuaText).not.toMatch(/^Wall time: [0-9.]+ seconds\nOutput:/);
       } finally {
         await client.close().catch(() => undefined);
         await runtime.close();

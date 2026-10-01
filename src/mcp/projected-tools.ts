@@ -1,7 +1,10 @@
 import { z, type ZodType } from "zod";
 
 import type { CodexTurnBridge } from "../bridge.js";
-import type { BridgeCallResult } from "../provider/protocol.js";
+import {
+  cleanCodeModeResult,
+  type BridgeCallResult,
+} from "../provider/protocol.js";
 import { wrapExecCode } from "../tool-policy.js";
 
 export interface NativeToolMetadata {
@@ -71,8 +74,8 @@ const DEFINITIONS: ProjectionDefinition[] = [
   exact("write_stdin", "Codex write stdin", writeStdinSchema),
   {
     ...exact("apply_patch", "Codex apply patch", applyPatchSchema),
-    adaptDescription: description =>
-      `${description}\n\nProjection note: pass the patch text in the \`patch\` argument.`,
+    adaptDescription: () =>
+      "Edit files using the Codex apply_patch grammar. Pass the complete patch text in the `patch` argument.",
     mapArguments: arguments_ => applyPatchSchema.parse(arguments_).patch,
   },
   exact("view_image", "Codex view image", viewImageSchema),
@@ -158,7 +161,9 @@ export function selectProjectedNativeTools(
       name: definition.exposeNativeName ? nativeName : definition.name,
       title: definition.title,
       nativeName,
-      description: definition.adaptDescription?.(native.description) ?? native.description,
+      description:
+        definition.adaptDescription?.(stripExecToolDeclaration(native.description)) ??
+        stripExecToolDeclaration(native.description),
       inputSchema: definition.inputSchema,
       mapArguments: definition.mapArguments ?? (arguments_ => definition.inputSchema.parse(arguments_)),
     }];
@@ -167,6 +172,7 @@ export function selectProjectedNativeTools(
 
 const INVENTORY_START = "__SIDEBAND_NATIVE_INVENTORY_START__";
 const INVENTORY_END = "__SIDEBAND_NATIVE_INVENTORY_END__";
+const PROJECTED_ERROR_MARKER = "__SIDEBAND_PROJECTED_NATIVE_ERROR__";
 
 export async function discoverProjectedNativeTools(
   bridge: CodexTurnBridge,
@@ -276,7 +282,7 @@ if (
     }
   }
   if (__sidebandNativeResult.isError === true) {
-    throw new Error("Projected Codex native tool reported an error");
+    text(${JSON.stringify(PROJECTED_ERROR_MARKER)});
   }
 } else if (
   __sidebandNativeResult &&
@@ -288,7 +294,56 @@ if (
   text(__sidebandNativeResult);
 }
 `;
-  return bridge.invokeExec(wrapExecCode(code));
+  return cleanProjectedNativeResult(
+    await bridge.invokeExec(wrapExecCode(code)),
+    tool,
+  );
+}
+
+function cleanProjectedNativeResult(
+  result: BridgeCallResult,
+  tool: ProjectedNativeTool,
+): BridgeCallResult {
+  result = cleanCodeModeResult(result);
+  let nativeError = false;
+  const content = result.content.filter(item => {
+    if (item.type !== "text") return true;
+    const text = item.text.trim();
+    if (text === PROJECTED_ERROR_MARKER) {
+      nativeError = true;
+      return false;
+    }
+    if (/^Wall time: [0-9.]+ seconds\nOutput:$/.test(text)) return false;
+    if (
+      /^Script error:\nError: Projected Codex native tool reported an error(?:\n\s+at .*)*$/s.test(text)
+    ) {
+      nativeError = true;
+      return false;
+    }
+    return true;
+  });
+
+  const isError = result.isError || nativeError;
+  if (
+    !isError &&
+    tool.nativeName === "apply_patch" &&
+    content.length === 1 &&
+    content[0].type === "text" &&
+    content[0].text.trim() === "{}"
+  ) {
+    return {
+      content: [{ type: "text", text: "Patch applied." }],
+      isError: false,
+    };
+  }
+
+  return { content, isError };
+}
+
+function stripExecToolDeclaration(description: string): string {
+  return description
+    .replace(/\n\nexec tool declaration:\n```ts[\s\S]*?```\s*$/i, "")
+    .trimEnd();
 }
 
 export function projectedToolJsonSchema(tool: ProjectedNativeTool): Record<string, unknown> {

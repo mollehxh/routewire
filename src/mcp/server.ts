@@ -2,7 +2,7 @@ import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import type { CodexTurnBridge } from "../bridge.js";
-import type { ExecToolSpec } from "../provider/protocol.js";
+import { cleanCodeModeResult, type ExecToolSpec } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
 import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
@@ -111,7 +111,7 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
       }),
     },
     async ({ code }): Promise<CallToolResult> => {
-      const result = await options.bridge.invokeExec(wrapExecCode(code));
+      const result = cleanCodeModeResult(await options.bridge.invokeExec(wrapExecCode(code)));
       return {
         content: result.content,
         isError: result.isError,

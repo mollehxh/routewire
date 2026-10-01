@@ -127,7 +127,10 @@ describe("Sideband MCP server", () => {
     bridge.acceptModelRequest(
       requestWithExec({
         callId: providerReply.callId,
-        output: [{ type: "input_text", text: "native-result" }],
+        output: [
+          { type: "input_text", text: "Script completed\nWall time 0.0 seconds\nOutput:\n" },
+          { type: "input_text", text: "native-result" },
+        ],
       }),
       () => undefined,
     );
@@ -183,13 +186,111 @@ describe("Sideband MCP server", () => {
     bridge.acceptModelRequest(
       requestWithExec({
         callId: providerReply.callId,
-        output: [{ type: "input_text", text: "DIRECT RESULT" }],
+        output: [
+          { type: "input_text", text: "Script completed\nWall time 0.0 seconds\nOutput:\n" },
+          {
+            type: "input_text",
+            text: '{"exit_code":0,"wall_time_seconds":0,"output":"DIRECT RESULT"}',
+          },
+        ],
       }),
       () => undefined,
     );
 
-    await expect(call).resolves.toMatchObject({
-      content: [{ type: "text", text: "DIRECT RESULT" }],
+    await expect(call).resolves.toEqual({
+      content: [
+        {
+          type: "text",
+          text: '{"exit_code":0,"wall_time_seconds":0,"output":"DIRECT RESULT"}',
+        },
+      ],
+      isError: false,
+    });
+  });
+
+  it("removes Code Mode transport wrappers and duplicate projected-tool errors", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let providerReply: ProviderReply | undefined;
+    bridge.acceptModelRequest(requestWithExec(), reply => {
+      providerReply = reply;
+    });
+    const execSpec = await bridge.ready();
+    const projectedTools = selectProjectedNativeTools([
+      {
+        name: "mcp__codex_apps__fkn_codex_mcp__cua_repl__js",
+        description: "CUA",
+      },
+    ]);
+    const server = createSidebandMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "sideband-test", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    resources.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const call = client.callTool({
+      name: "mcp__codex_apps__fkn_codex_mcp__cua_repl__js",
+      arguments: { code: "await cua.getState();" },
+    });
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing CUA tool call");
+    bridge.acceptModelRequest(
+      requestWithExec({
+        callId: providerReply.callId,
+        output: [
+          { type: "input_text", text: "Script failed\nWall time 1.0 seconds\nOutput:\n" },
+          { type: "input_text", text: "Wall time: 0.0125 seconds\nOutput:" },
+          { type: "input_text", text: '{"error":{"code":"tool_unavailable"},"ok":false}' },
+          { type: "input_text", text: "__SIDEBAND_PROJECTED_NATIVE_ERROR__" },
+        ],
+      }),
+      () => undefined,
+    );
+
+    await expect(call).resolves.toEqual({
+      content: [
+        { type: "text", text: '{"error":{"code":"tool_unavailable"},"ok":false}' },
+      ],
+      isError: true,
+    });
+  });
+
+  it("turns an empty successful apply_patch payload into a useful result", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let providerReply: ProviderReply | undefined;
+    bridge.acceptModelRequest(requestWithExec(), reply => {
+      providerReply = reply;
+    });
+    const execSpec = await bridge.ready();
+    const projectedTools = selectProjectedNativeTools([
+      { name: "apply_patch", description: "PATCH" },
+    ]);
+    const server = createSidebandMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "sideband-test", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    resources.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const call = client.callTool({
+      name: "apply_patch",
+      arguments: { patch: "*** Begin Patch\n*** End Patch" },
+    });
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing patch tool call");
+    bridge.acceptModelRequest(
+      requestWithExec({
+        callId: providerReply.callId,
+        output: [
+          { type: "input_text", text: "Script completed\nWall time 0.0 seconds\nOutput:\n" },
+          { type: "input_text", text: "{}" },
+        ],
+      }),
+      () => undefined,
+    );
+
+    await expect(call).resolves.toEqual({
+      content: [{ type: "text", text: "Patch applied." }],
       isError: false,
     });
   });
@@ -271,7 +372,6 @@ describe("Sideband MCP server", () => {
     const getResult = await getCall;
     expect(JSON.parse(getResult.content.find(item => item.type === "text")!.text)).toEqual({
       skills: [{ name: "alpha", content: "---\nname: alpha\n---\nbody" }],
-      errors: [],
     });
   });
 

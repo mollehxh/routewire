@@ -221,7 +221,10 @@ if (__sidebandNative?.isError === true) {
   }
 
   return {
-    content: [{ type: "text", text: JSON.stringify({ skills: results, errors }) }],
+    content: [{
+      type: "text",
+      text: JSON.stringify(errors.length > 0 ? { skills: results, errors } : { skills: results }),
+    }],
     isError: errors.length > 0,
   };
 }

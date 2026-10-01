@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
-import { isRecord } from "../provider/protocol.js";
+import { cleanCodeModeResult, isRecord } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
 import {
   bootstrapToolJsonSchema,
@@ -145,7 +145,7 @@ export async function handleModernMcpRequest(
           sendJson(res, 200, rpcError(id, -32602, "exec requires a non-empty string argument: code"));
           return true;
         }
-        result = await context.bridge.invokeExec(wrapExecCode(args.code));
+        result = cleanCodeModeResult(await context.bridge.invokeExec(wrapExecCode(args.code)));
       } else {
         sendJson(res, 200, rpcError(id, -32602, `Unknown tool: ${name}`));
         return true;
