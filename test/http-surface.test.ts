@@ -80,10 +80,10 @@ describe("SidebandHttpSurface", () => {
 
     const listed = await client.listTools();
     expect(listed.tools).toHaveLength(1);
-    expect(listed.tools[0]).toMatchObject({
-      name: "exec",
-      description: "LIVE CODEX EXEC DESCRIPTION",
-    });
+    expect(listed.tools[0]).toMatchObject({ name: "exec" });
+    expect(listed.tools[0].description).toContain("LIVE CODEX EXEC DESCRIPTION");
+    expect(listed.tools[0].description).toContain("mcp__node_repl__js");
+    expect(listed.tools[0].description).toContain("setupBrowserRuntime()");
 
     const call = client.callTool({
       name: "exec",
@@ -182,7 +182,6 @@ describe("SidebandHttpSurface", () => {
         tools: [
           {
             name: "exec",
-            description: "LIVE CODEX EXEC DESCRIPTION",
             inputSchema: {
               type: "object",
               required: ["code"],

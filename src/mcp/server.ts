@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
-import { wrapExecCode } from "../tool-policy.js";
+import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
 
 export interface CreateSidebandMcpServerOptions {
   bridge: CodexTurnBridge;
@@ -17,13 +17,13 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
     "exec",
     {
       title: "Codex exec",
-      description: options.execSpec.description,
+      description: `${options.execSpec.description}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
       inputSchema: z.object({
         code: z
           .string()
           .min(1)
           .describe(
-            "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. Sideband blocks nested tools that start or continue independent model/agent sessions.",
+            `Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. ${SIDEBAND_EXEC_GUIDANCE}`,
           ),
       }),
     },

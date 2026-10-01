@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { isRecord } from "../provider/protocol.js";
-import { wrapExecCode } from "../tool-policy.js";
+import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
 
 export const MODERN_MCP_PROTOCOL_VERSION = "2026-07-28";
 
@@ -134,15 +134,14 @@ function modernExecTool(execSpec: ExecToolSpec): Record<string, unknown> {
   return {
     name: "exec",
     title: "Codex exec",
-    description: execSpec.description,
+    description: `${execSpec.description}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
     inputSchema: {
       type: "object",
       properties: {
         code: {
           type: "string",
           minLength: 1,
-          description:
-            "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. Sideband blocks nested tools that start or continue independent model/agent sessions.",
+          description: `Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences. ${SIDEBAND_EXEC_GUIDANCE}`,
         },
       },
       required: ["code"],

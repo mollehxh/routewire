@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isModelSpawningTool, wrapExecCode } from "../src/tool-policy.js";
+import {
+  isModelSpawningTool,
+  isSidebandBlockedTool,
+  SIDEBAND_EXEC_GUIDANCE,
+  wrapExecCode,
+} from "../src/tool-policy.js";
 
 describe("Sideband tool policy", () => {
   it("blocks tools that start or continue independent model/agent sessions", () => {
@@ -25,12 +30,36 @@ describe("Sideband tool policy", () => {
     }
   });
 
+  it("blocks Codex Apps test-harness tools without blocking canonical Browser Use", () => {
+    expect(
+      isSidebandBlockedTool({
+        name: "mcp__codex_apps__test_harnes_0001_node_repl",
+        description: "Node REPL with Browser Use runtime.",
+      }),
+    ).toBe(true);
+    expect(
+      isSidebandBlockedTool({
+        name: "mcp__node_repl__js",
+        description: "Canonical Node REPL.",
+      }),
+    ).toBe(false);
+  });
+
+  it("documents the canonical Browser Use bootstrap for ChatGPT", () => {
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain('import("@oai/browser-desktop")');
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("setupBrowserRuntime()");
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("mcp__node_repl__js");
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("unrelated to Codex multi-agent settings");
+  });
+
   it("wraps Code Mode cells with a dynamic tools/ALL_TOOLS policy before user code", () => {
     const wrapped = wrapExecCode("text(await tools.exec_command({cmd: 'pwd'}));");
 
     expect(wrapped).toContain("globalThis.ALL_TOOLS");
     expect(wrapped).toContain("new Proxy");
     expect(wrapped).toContain("Sideband blocked model-spawning tool");
+    expect(wrapped).toContain("Sideband blocked test-harness tool");
+    expect(wrapped).toContain("codex_apps__test_harnes");
     expect(wrapped).toContain("text(await tools.exec_command({cmd: 'pwd'}));");
   });
 });

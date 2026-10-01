@@ -64,8 +64,10 @@ describe("Sideband MCP server", () => {
     expect(listed.tools).toHaveLength(1);
     expect(listed.tools[0]).toMatchObject({
       name: "exec",
-      description: "EXACT CODEX EXEC DESCRIPTION",
     });
+    expect(listed.tools[0].description).toContain("EXACT CODEX EXEC DESCRIPTION");
+    expect(listed.tools[0].description).toContain("mcp__node_repl__js");
+    expect(listed.tools[0].description).toContain("setupBrowserRuntime()");
     expect(listed.tools[0].inputSchema).toMatchObject({
       type: "object",
       required: ["code"],
