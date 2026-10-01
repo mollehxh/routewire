@@ -54,9 +54,9 @@ describe("projected Codex native tools", () => {
     expect(cua?.description).toContain("Browser/Chrome skill");
     expect(cua?.description).toContain("await cua.getState();");
     expect(cua?.description).not.toContain("CUA");
-    expect(cua?.description.length).toBeLessThan(600);
+    expect(cua?.description.length).toBeLessThan(250);
     expect(projected.find(tool => tool.name.endsWith("cua_repl__js_reset"))?.description).toContain(
-      "does not close browser tabs or native apps",
+      "Apps and browser state are preserved",
     );
     expect(
       projected.find(tool => tool.name.endsWith("cua_repl__js_add_node_module_dir"))?.description,
