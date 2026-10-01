@@ -45,11 +45,10 @@ describe("Sideband tool policy", () => {
     ).toBe(false);
   });
 
-  it("documents the canonical Browser Use bootstrap for ChatGPT", () => {
-    expect(SIDEBAND_EXEC_GUIDANCE).toContain('import("@oai/browser-desktop")');
-    expect(SIDEBAND_EXEC_GUIDANCE).toContain("setupBrowserRuntime()");
-    expect(SIDEBAND_EXEC_GUIDANCE).toContain("mcp__node_repl__js");
-    expect(SIDEBAND_EXEC_GUIDANCE).toContain("unrelated to Codex multi-agent settings");
+  it("documents when ChatGPT should prefer direct tools versus Code Mode", () => {
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("Prefer a directly exposed Sideband native tool");
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("multiple native calls");
+    expect(SIDEBAND_EXEC_GUIDANCE).toContain("ALL_TOOLS");
   });
 
   it("wraps Code Mode cells with a dynamic tools/ALL_TOOLS policy before user code", () => {

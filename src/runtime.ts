@@ -1,6 +1,7 @@
 import { CodexTurnBridge } from "./bridge.js";
 import { startCodexProcess, type CodexExit } from "./codex/process.js";
 import { SidebandHttpSurface } from "./http-surface.js";
+import { discoverProjectedNativeTools } from "./mcp/projected-tools.js";
 import { createSidebandMcpServer } from "./mcp/server.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 import { ensureTunnelClient } from "./tunnel/install.js";
@@ -61,7 +62,13 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       }),
     ]);
 
-    surface.setMcpServer(createSidebandMcpServer({ bridge, execSpec }), execSpec);
+    const projectedTools = await discoverProjectedNativeTools(bridge);
+
+    surface.setMcpServer(
+      createSidebandMcpServer({ bridge, execSpec, projectedTools }),
+      execSpec,
+      projectedTools,
+    );
 
     const codexExitWatch = codex.exited.then(exit => {
       if (!closing) {

@@ -4,12 +4,18 @@ import type { CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { isRecord } from "../provider/protocol.js";
 import { SIDEBAND_EXEC_GUIDANCE, wrapExecCode } from "../tool-policy.js";
+import {
+  invokeProjectedNativeTool,
+  projectedToolJsonSchema,
+  type ProjectedNativeTool,
+} from "./projected-tools.js";
 
 export const MODERN_MCP_PROTOCOL_VERSION = "2026-07-28";
 
 export interface ModernMcpContext {
   bridge: CodexTurnBridge;
   execSpec: ExecToolSpec;
+  projectedTools?: ProjectedNativeTool[];
 }
 
 export async function handleModernMcpRequest(
@@ -77,7 +83,10 @@ export async function handleModernMcpRequest(
   if (body.method === "tools/list") {
     sendJson(res, 200, rpcResult(id, {
       resultType: "complete",
-      tools: [modernExecTool(context.execSpec)],
+      tools: [
+        ...(context.projectedTools ?? []).map(modernProjectedTool),
+        modernExecTool(context.execSpec),
+      ],
       ttlMs: 0,
       cacheScope: "private",
       _meta: serverMeta(),
@@ -96,19 +105,23 @@ export async function handleModernMcpRequest(
       );
       return true;
     }
-    if (name !== "exec") {
-      sendJson(res, 200, rpcError(id, -32602, `Unknown Sideband tool: ${name}`));
-      return true;
-    }
-
     const args = isRecord(params.arguments) ? params.arguments : {};
-    if (typeof args.code !== "string" || args.code.length === 0) {
-      sendJson(res, 200, rpcError(id, -32602, "exec requires a non-empty string argument: code"));
-      return true;
-    }
 
     try {
-      const result = await context.bridge.invokeExec(wrapExecCode(args.code));
+      const projected = (context.projectedTools ?? []).find(tool => tool.name === name);
+      let result;
+      if (projected) {
+        result = await invokeProjectedNativeTool(context.bridge, projected, args);
+      } else if (name === "exec") {
+        if (typeof args.code !== "string" || args.code.length === 0) {
+          sendJson(res, 200, rpcError(id, -32602, "exec requires a non-empty string argument: code"));
+          return true;
+        }
+        result = await context.bridge.invokeExec(wrapExecCode(args.code));
+      } else {
+        sendJson(res, 200, rpcError(id, -32602, `Unknown Sideband tool: ${name}`));
+        return true;
+      }
       sendJson(res, 200, rpcResult(id, {
         resultType: "complete",
         content: result.content,
@@ -128,6 +141,15 @@ export async function handleModernMcpRequest(
 
   sendJson(res, 404, rpcError(id, -32601, `Method not found: ${body.method}`));
   return true;
+}
+
+function modernProjectedTool(tool: ProjectedNativeTool): Record<string, unknown> {
+  return {
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    inputSchema: projectedToolJsonSchema(tool),
+  };
 }
 
 function modernExecTool(execSpec: ExecToolSpec): Record<string, unknown> {

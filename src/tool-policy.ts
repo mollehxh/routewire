@@ -13,11 +13,10 @@ const TEST_HARNESS_TOOL_NAME_PATTERN = /(?:^|__)codex_apps__test_harnes[^_]*_/i;
 
 export const SIDEBAND_EXEC_GUIDANCE = [
   "Sideband runs one real Codex turn and exposes its native Code Mode tools.",
-  "Prefer canonical local Codex tools over similarly named Codex Apps/test-harness tools.",
-  "For Browser Use, use exactly mcp__node_repl__js when it is present; do not use codex_apps__test_harnes* node_repl tools.",
-  'Inside canonical node_repl, Browser Use is initialized explicitly: const { setupBrowserRuntime } = await import("@oai/browser-desktop"); const agent = await setupBrowserRuntime();',
-  "Then use await agent.browsers.list() and select the requested browser backend (for Chrome extension, type === \"extension\").",
-  "Do not infer Browser Use is unavailable merely because globalThis.agent or import.meta.__codexNativePipe is absent; the browser agent is created by setupBrowserRuntime() and is unrelated to Codex multi-agent settings.",
+  "Prefer a directly exposed Sideband native tool for a single operation.",
+  "Use exec when multiple native calls, batching, persistent JavaScript values, control flow, or an unprojected native Codex tool make Code Mode useful.",
+  "Inside exec, native Codex tools are available through tools and described by ALL_TOOLS.",
+  "Sideband blocks nested tools that start or continue independent model/agent sessions and test-harness duplicates.",
 ].join(" ");
 
 export function isModelSpawningTool(tool: ToolMetadata): boolean {

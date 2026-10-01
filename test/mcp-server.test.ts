@@ -2,6 +2,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
+import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
 import { createSidebandMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
 
@@ -66,8 +67,7 @@ describe("Sideband MCP server", () => {
       name: "exec",
     });
     expect(listed.tools[0].description).toContain("EXACT CODEX EXEC DESCRIPTION");
-    expect(listed.tools[0].description).toContain("mcp__node_repl__js");
-    expect(listed.tools[0].description).toContain("setupBrowserRuntime()");
+    expect(listed.tools[0].description).toContain("Prefer a directly exposed Sideband native tool");
     expect(listed.tools[0].inputSchema).toMatchObject({
       type: "object",
       required: ["code"],
@@ -97,6 +97,61 @@ describe("Sideband MCP server", () => {
 
     await expect(call).resolves.toMatchObject({
       content: [{ type: "text", text: "native-result" }],
+      isError: false,
+    });
+  });
+
+  it("projects a native exec_command tool directly while still executing through Codex functions.exec", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let providerReply: ProviderReply | undefined;
+    bridge.acceptModelRequest(requestWithExec(), reply => {
+      providerReply = reply;
+    });
+    const execSpec = await bridge.ready();
+    const projectedTools = selectProjectedNativeTools([
+      {
+        name: "exec_command",
+        description: "LIVE NATIVE EXEC COMMAND DESCRIPTION",
+      },
+    ]);
+
+    const server = createSidebandMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "sideband-test", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    resources.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const listed = await client.listTools();
+    expect(listed.tools.map(tool => tool.name)).toEqual(["exec_command", "exec"]);
+    expect(listed.tools[0].description).toContain("LIVE NATIVE EXEC COMMAND DESCRIPTION");
+    expect(listed.tools[0].inputSchema).toMatchObject({
+      type: "object",
+      required: ["cmd"],
+    });
+
+    const call = client.callTool({
+      name: "exec_command",
+      arguments: { cmd: "printf DIRECT" },
+    });
+
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    if (!providerReply || providerReply.kind !== "tool_call") {
+      throw new Error("expected provider tool call");
+    }
+    expect(providerReply.input).toContain('tools["exec_command"]');
+    expect(providerReply.input).toContain("printf DIRECT");
+
+    bridge.acceptModelRequest(
+      requestWithExec({
+        callId: providerReply.callId,
+        output: [{ type: "input_text", text: "DIRECT RESULT" }],
+      }),
+      () => undefined,
+    );
+
+    await expect(call).resolves.toMatchObject({
+      content: [{ type: "text", text: "DIRECT RESULT" }],
       isError: false,
     });
   });

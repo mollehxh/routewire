@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
 import { SidebandHttpSurface } from "../src/http-surface.js";
+import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
 import { createSidebandMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
 
@@ -82,8 +83,7 @@ describe("SidebandHttpSurface", () => {
     expect(listed.tools).toHaveLength(1);
     expect(listed.tools[0]).toMatchObject({ name: "exec" });
     expect(listed.tools[0].description).toContain("LIVE CODEX EXEC DESCRIPTION");
-    expect(listed.tools[0].description).toContain("mcp__node_repl__js");
-    expect(listed.tools[0].description).toContain("setupBrowserRuntime()");
+    expect(listed.tools[0].description).toContain("Prefer a directly exposed Sideband native tool");
 
     const call = client.callTool({
       name: "exec",
@@ -121,10 +121,17 @@ describe("SidebandHttpSurface", () => {
       providerReply = reply;
     });
     const execSpec = await bridge.ready();
+    const projectedTools = selectProjectedNativeTools([
+      { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
+    ]);
 
     const surface = new SidebandHttpSurface({ bridge });
     await surface.start();
-    surface.setMcpServer(createSidebandMcpServer({ bridge, execSpec }), execSpec);
+    surface.setMcpServer(
+      createSidebandMcpServer({ bridge, execSpec, projectedTools }),
+      execSpec,
+      projectedTools,
+    );
     closers.push(() => surface.close());
 
     const modernHeaders = (method: string, name?: string) => ({
@@ -181,6 +188,14 @@ describe("SidebandHttpSurface", () => {
         resultType: "complete",
         tools: [
           {
+            name: "exec_command",
+            description: "LIVE DIRECT EXEC DESCRIPTION",
+            inputSchema: {
+              type: "object",
+              required: ["cmd"],
+            },
+          },
+          {
             name: "exec",
             inputSchema: {
               type: "object",
@@ -192,6 +207,56 @@ describe("SidebandHttpSurface", () => {
         cacheScope: "private",
       },
     });
+
+    const directCallResponse = fetch(surface.mcpUrl, {
+      method: "POST",
+      headers: modernHeaders("tools/call", "exec_command"),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "direct-call-1",
+        method: "tools/call",
+        params: {
+          name: "exec_command",
+          arguments: { cmd: "printf MODERN_DIRECT" },
+          _meta: meta,
+        },
+      }),
+    });
+
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing direct tool call");
+    expect(providerReply.input).toContain('tools["exec_command"]');
+    expect(providerReply.input).toContain("MODERN_DIRECT");
+
+    bridge.acceptModelRequest(
+      {
+        ...initialRequest(),
+        input: [
+          ...initialRequest().input,
+          {
+            type: "custom_tool_call_output",
+            call_id: providerReply.callId,
+            output: [{ type: "input_text", text: "modern-direct-result" }],
+          },
+        ],
+      },
+      reply => {
+        providerReply = reply;
+      },
+    );
+
+    const directCall = await directCallResponse;
+    expect(directCall.status).toBe(200);
+    await expect(directCall.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "direct-call-1",
+      result: {
+        resultType: "complete",
+        content: [{ type: "text", text: "modern-direct-result" }],
+        isError: false,
+      },
+    });
+    providerReply = undefined;
 
     const callResponse = fetch(surface.mcpUrl, {
       method: "POST",
@@ -208,9 +273,12 @@ describe("SidebandHttpSurface", () => {
       }),
     });
 
-    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
-    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing tool call");
-    expect(providerReply.input).toContain("modern-roundtrip");
+    await vi.waitFor(() =>
+      expect((providerReply as ProviderReply | undefined)?.kind).toBe("tool_call"),
+    );
+    const execReply = providerReply as ProviderReply | undefined;
+    if (!execReply || execReply.kind !== "tool_call") throw new Error("missing tool call");
+    expect(execReply.input).toContain("modern-roundtrip");
 
     bridge.acceptModelRequest(
       {
@@ -219,7 +287,7 @@ describe("SidebandHttpSurface", () => {
           ...initialRequest().input,
           {
             type: "custom_tool_call_output",
-            call_id: providerReply.callId,
+            call_id: execReply.callId,
             output: [{ type: "input_text", text: "modern-result" }],
           },
         ],

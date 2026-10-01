@@ -25,9 +25,28 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         await client.connect(new StreamableHTTPClientTransport(new URL(runtime.mcpUrl)));
 
         const listed = await client.listTools();
-        expect(listed.tools).toHaveLength(1);
-        expect(listed.tools[0].name).toBe("exec");
-        expect(listed.tools[0].description).toContain("exec_command");
+        const listedNames = listed.tools.map(tool => tool.name);
+        expect(listedNames).toContain("exec");
+        expect(listedNames).toContain("exec_command");
+        expect(listedNames).toContain("apply_patch");
+        expect(listedNames).toContain("node_repl");
+        expect(listedNames).toContain("cua_repl");
+        expect(listed.tools.find(tool => tool.name === "exec")?.description).toContain(
+          "exec_command",
+        );
+        expect(listed.tools.find(tool => tool.name === "node_repl")?.description).toContain(
+          "persistent `node_repl`",
+        );
+
+        const directExec = await client.callTool({
+          name: "exec_command",
+          arguments: { cmd: "printf SIDEBAND_DIRECT_EXEC_OK", login: false },
+        });
+        const directExecText = directExec.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        expect(directExecText).toContain("SIDEBAND_DIRECT_EXEC_OK");
 
         const policy = await client.callTool({
           name: "exec",
@@ -89,41 +108,32 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(discoveryText).toContain('"modelTools":[]');
 
         const browser = await client.callTool({
-          name: "exec",
+          name: "node_repl",
           arguments: {
-            code: [
-              "const nodeTool = ALL_TOOLS.find(x => x.name === 'mcp__node_repl__js') ?? ALL_TOOLS.find(x => /node_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /node_repl/i.test(x.name) && !/reset|add_node_module/i.test(x.name) && /browser|javascript|repl/i.test(String(x.description ?? '')));",
-              "if (!nodeTool) throw new Error('node_repl is not exposed');",
-              "const result = await tools[nodeTool.name]({ code: \"nodeRepl.write('SIDEBAND_BROWSER_OK')\", title: 'Sideband Browser smoke' });",
-              "text({ name: nodeTool.name, ok: result?.isError !== true, result });",
-            ].join("\n"),
+            code: "nodeRepl.write('SIDEBAND_BROWSER_OK')",
+            title: "Sideband Browser smoke",
           },
         });
         const browserText = browser.content
           .filter(item => item.type === "text")
           .map(item => item.text)
           .join("\n");
-        expect(browserText).toContain("node_repl");
         expect(browserText).toContain("SIDEBAND_BROWSER_OK");
-        expect(browserText).toContain('"ok":true');
 
         const cua = await client.callTool({
-          name: "exec",
+          name: "cua_repl",
           arguments: {
-            code: [
-              "const cuaTool = ALL_TOOLS.find(x => /cua_repl__js$/i.test(x.name)) ?? ALL_TOOLS.find(x => /computer_repl/i.test(x.name) && /cua|computer use/i.test(String(x.description ?? '')));",
-              "if (!cuaTool) throw new Error('cua_repl is not exposed');",
-              "const result = await tools[cuaTool.name]({ code: \"await cua.getState();\", title: 'Sideband CUA smoke', timeout_ms: 10000 });",
-              "text({ name: cuaTool.name, ok: result?.isError !== true });",
-            ].join("\n"),
+            code: "await cua.getState();",
+            title: "Sideband CUA smoke",
+            timeout_ms: 10000,
           },
         });
         const cuaText = cua.content
           .filter(item => item.type === "text")
           .map(item => item.text)
           .join("\n");
-        expect(cuaText).toContain("cua_repl");
-        expect(cuaText).toContain('"ok":true');
+        expect(cua.isError).not.toBe(true);
+        expect(cuaText.length).toBeGreaterThan(0);
       } finally {
         await client.close().catch(() => undefined);
         await runtime.close();
