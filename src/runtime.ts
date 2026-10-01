@@ -3,6 +3,7 @@ import { startCodexProcess, type CodexExit } from "./codex/process.js";
 import { SidebandHttpSurface } from "./http-surface.js";
 import { discoverProjectedNativeTools } from "./mcp/projected-tools.js";
 import { createSidebandMcpServer } from "./mcp/server.js";
+import { discoverNativeSkillTools } from "./mcp/skill-tools.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 import { ensureTunnelClient } from "./tunnel/install.js";
 import { startTunnelClient, type StartTunnelClientOptions, type TunnelClientHandle } from "./tunnel/process.js";
@@ -63,11 +64,13 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
     ]);
 
     const projectedTools = await discoverProjectedNativeTools(bridge);
+    const nativeSkillTools = await discoverNativeSkillTools(bridge);
 
     surface.setMcpServer(
-      createSidebandMcpServer({ bridge, execSpec, projectedTools }),
+      createSidebandMcpServer({ bridge, execSpec, projectedTools, nativeSkillTools }),
       execSpec,
       projectedTools,
+      nativeSkillTools,
     );
 
     const codexExitWatch = codex.exited.then(exit => {

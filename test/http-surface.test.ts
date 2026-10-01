@@ -124,13 +124,18 @@ describe("SidebandHttpSurface", () => {
     const projectedTools = selectProjectedNativeTools([
       { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
     ]);
+    const nativeSkillTools = {
+      listName: "mcp__codex_apps__fkn_codex_codex_skills_list",
+      getName: "mcp__codex_apps__fkn_codex_codex_skill_get",
+    };
 
     const surface = new SidebandHttpSurface({ bridge });
     await surface.start();
     surface.setMcpServer(
-      createSidebandMcpServer({ bridge, execSpec, projectedTools }),
+      createSidebandMcpServer({ bridge, execSpec, projectedTools, nativeSkillTools }),
       execSpec,
       projectedTools,
+      nativeSkillTools,
     );
     closers.push(() => surface.close());
 
@@ -196,6 +201,19 @@ describe("SidebandHttpSurface", () => {
             },
           },
           {
+            name: "skills",
+            inputSchema: {
+              type: "object",
+            },
+          },
+          {
+            name: "get_skill",
+            inputSchema: {
+              type: "object",
+              required: ["names"],
+            },
+          },
+          {
             name: "exec",
             inputSchema: {
               type: "object",
@@ -207,6 +225,58 @@ describe("SidebandHttpSurface", () => {
         cacheScope: "private",
       },
     });
+
+    const skillsCallResponse = fetch(surface.mcpUrl, {
+      method: "POST",
+      headers: modernHeaders("tools/call", "skills"),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "skills-call-1",
+        method: "tools/call",
+        params: {
+          name: "skills",
+          arguments: {},
+          _meta: meta,
+        },
+      }),
+    });
+
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    const skillsReply = providerReply as ProviderReply | undefined;
+    if (!skillsReply || skillsReply.kind !== "tool_call") throw new Error("missing skills call");
+    expect(skillsReply.input).toContain(nativeSkillTools.listName);
+    bridge.acceptModelRequest(
+      {
+        ...initialRequest(),
+        input: [
+          ...initialRequest().input,
+          {
+            type: "custom_tool_call_output",
+            call_id: skillsReply.callId,
+            output: [{
+              type: "input_text",
+              text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":1,"skills":[{"name":"alpha","description":"A"}]}__SIDEBAND_SKILL_PAYLOAD_END__',
+            }],
+          },
+        ],
+      },
+      reply => {
+        providerReply = reply;
+      },
+    );
+
+    const skillsCall = await skillsCallResponse;
+    expect(skillsCall.status).toBe(200);
+    await expect(skillsCall.json()).resolves.toMatchObject({
+      jsonrpc: "2.0",
+      id: "skills-call-1",
+      result: {
+        resultType: "complete",
+        content: [{ type: "text", text: '{"skills":[{"name":"alpha","description":"A"}]}' }],
+        isError: false,
+      },
+    });
+    providerReply = undefined;
 
     const directCallResponse = fetch(surface.mcpUrl, {
       method: "POST",
@@ -224,9 +294,10 @@ describe("SidebandHttpSurface", () => {
     });
 
     await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
-    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing direct tool call");
-    expect(providerReply.input).toContain('tools["exec_command"]');
-    expect(providerReply.input).toContain("MODERN_DIRECT");
+    const directReply = providerReply as ProviderReply | undefined;
+    if (!directReply || directReply.kind !== "tool_call") throw new Error("missing direct tool call");
+    expect(directReply.input).toContain('tools["exec_command"]');
+    expect(directReply.input).toContain("MODERN_DIRECT");
 
     bridge.acceptModelRequest(
       {
@@ -235,7 +306,7 @@ describe("SidebandHttpSurface", () => {
           ...initialRequest().input,
           {
             type: "custom_tool_call_output",
-            call_id: providerReply.callId,
+            call_id: directReply.callId,
             output: [{ type: "input_text", text: "modern-direct-result" }],
           },
         ],

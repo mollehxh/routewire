@@ -8,11 +8,17 @@ import {
   invokeProjectedNativeTool,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
+import {
+  invokeSidebandSkillTool,
+  SIDEBAND_SKILL_TOOL_DEFINITIONS,
+  type NativeSkillTools,
+} from "./skill-tools.js";
 
 export interface CreateSidebandMcpServerOptions {
   bridge: CodexTurnBridge;
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
+  nativeSkillTools?: NativeSkillTools;
 }
 
 export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions): McpServer {
@@ -34,6 +40,35 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
         };
       },
     );
+  }
+
+  if (options.nativeSkillTools) {
+    for (const definition of SIDEBAND_SKILL_TOOL_DEFINITIONS) {
+      server.registerTool(
+        definition.name,
+        {
+          title: definition.title,
+          description: definition.description,
+          inputSchema: definition.inputSchema,
+        },
+        async (arguments_: unknown): Promise<CallToolResult> => {
+          try {
+            const result = await invokeSidebandSkillTool(
+              options.bridge,
+              options.nativeSkillTools!,
+              definition.name,
+              arguments_,
+            );
+            return { content: result.content, isError: result.isError };
+          } catch (error) {
+            return {
+              content: [{ type: "text", text: errorMessage(error) }],
+              isError: true,
+            };
+          }
+        },
+      );
+    }
   }
 
   server.registerTool(
@@ -60,4 +95,8 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
   );
 
   return server;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

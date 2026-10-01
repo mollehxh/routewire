@@ -155,4 +155,85 @@ describe("Sideband MCP server", () => {
       isError: false,
     });
   });
+
+  it("exposes skills/get_skill as thin wrappers over Codex native skill tools", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let providerReply: ProviderReply | undefined;
+    bridge.acceptModelRequest(requestWithExec(), reply => {
+      providerReply = reply;
+    });
+    const execSpec = await bridge.ready();
+    const nativeSkillTools = {
+      listName: "mcp__codex_apps__fkn_codex_codex_skills_list",
+      getName: "mcp__codex_apps__fkn_codex_codex_skill_get",
+    };
+
+    const server = createSidebandMcpServer({ bridge, execSpec, nativeSkillTools });
+    const client = new Client({ name: "sideband-test", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    resources.push(client, server);
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const listed = await client.listTools();
+    expect(listed.tools.map(tool => tool.name)).toEqual(["skills", "get_skill", "exec"]);
+    expect(listed.tools.find(tool => tool.name === "skills")?.description).toContain(
+      "Codex's native skill catalog",
+    );
+    expect(listed.tools.find(tool => tool.name === "get_skill")?.inputSchema).toMatchObject({
+      type: "object",
+      required: ["names"],
+    });
+
+    const skillsCall = client.callTool({ name: "skills", arguments: {} });
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    if (!providerReply || providerReply.kind !== "tool_call") throw new Error("missing skills tool call");
+    expect(providerReply.input).toContain(nativeSkillTools.listName);
+    expect(providerReply.input).toContain("force_reload: false");
+    bridge.acceptModelRequest(
+      requestWithExec({
+        callId: providerReply.callId,
+        output: [{
+          type: "input_text",
+          text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":2,"skills":[{"name":"alpha","description":"A"},{"name":"beta","description":"B"}]}__SIDEBAND_SKILL_PAYLOAD_END__',
+        }],
+      }),
+      reply => {
+        providerReply = reply;
+      },
+    );
+    const skillsResult = await skillsCall;
+    expect(JSON.parse(skillsResult.content.find(item => item.type === "text")!.text)).toEqual({
+      skills: [
+        { name: "alpha", description: "A" },
+        { name: "beta", description: "B" },
+      ],
+    });
+
+    providerReply = undefined;
+    const getCall = client.callTool({
+      name: "get_skill",
+      arguments: { names: ["alpha"] },
+    });
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    const getReply = providerReply as ProviderReply | undefined;
+    if (!getReply || getReply.kind !== "tool_call") throw new Error("missing get_skill tool call");
+    expect(getReply.input).toContain(nativeSkillTools.getName);
+    expect(getReply.input).toContain('name: "alpha"');
+    bridge.acceptModelRequest(
+      requestWithExec({
+        callId: getReply.callId,
+        output: [{
+          type: "input_text",
+          text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":24,"chunk":"---\\nname: alpha\\n---\\nbody"}__SIDEBAND_SKILL_PAYLOAD_END__',
+        }],
+      }),
+      () => undefined,
+    );
+    const getResult = await getCall;
+    expect(JSON.parse(getResult.content.find(item => item.type === "text")!.text)).toEqual({
+      skills: [{ name: "alpha", content: "---\nname: alpha\n---\nbody" }],
+      errors: [],
+    });
+  });
 });

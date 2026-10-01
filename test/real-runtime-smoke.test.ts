@@ -29,6 +29,8 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(listedNames).toContain("exec");
         expect(listedNames).toContain("exec_command");
         expect(listedNames).toContain("apply_patch");
+        expect(listedNames).toContain("skills");
+        expect(listedNames).toContain("get_skill");
         expect(listedNames).toContain("mcp__node_repl__js");
         const cuaToolName = listedNames.find(name => /cua_repl__js$/i.test(name));
         expect(cuaToolName).toBeTruthy();
@@ -38,6 +40,36 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(listed.tools.find(tool => tool.name === "mcp__node_repl__js")?.description).toContain(
           "persistent `node_repl`",
         );
+
+        const skillsResult = await client.callTool({ name: "skills", arguments: {} });
+        expect(skillsResult.isError).not.toBe(true);
+        const skillsText = skillsResult.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        const skillsPayload = JSON.parse(skillsText) as {
+          skills: Array<{ name: string; description: string }>;
+        };
+        expect(skillsPayload.skills.length).toBeGreaterThan(0);
+        expect(skillsPayload.skills.every(skill => skill.name && skill.description)).toBe(true);
+
+        const skillName = skillsPayload.skills[0].name;
+        const skillResult = await client.callTool({
+          name: "get_skill",
+          arguments: { names: [skillName] },
+        });
+        expect(skillResult.isError).not.toBe(true);
+        const skillText = skillResult.content
+          .filter(item => item.type === "text")
+          .map(item => item.text)
+          .join("\n");
+        const skillPayload = JSON.parse(skillText) as {
+          skills: Array<{ name: string; content: string }>;
+          errors: unknown[];
+        };
+        expect(skillPayload.errors).toEqual([]);
+        expect(skillPayload.skills[0].name).toBe(skillName);
+        expect(skillPayload.skills[0].content).toContain("---");
 
         const directExec = await client.callTool({
           name: "exec_command",
@@ -140,6 +172,6 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         await runtime.close();
       }
     },
-    45_000,
+    75_000,
   );
 });

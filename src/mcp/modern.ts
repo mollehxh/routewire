@@ -9,6 +9,12 @@ import {
   projectedToolJsonSchema,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
+import {
+  invokeSidebandSkillTool,
+  SIDEBAND_SKILL_TOOL_DEFINITIONS,
+  skillToolJsonSchema,
+  type NativeSkillTools,
+} from "./skill-tools.js";
 
 export const MODERN_MCP_PROTOCOL_VERSION = "2026-07-28";
 
@@ -16,6 +22,7 @@ export interface ModernMcpContext {
   bridge: CodexTurnBridge;
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
+  nativeSkillTools?: NativeSkillTools;
 }
 
 export async function handleModernMcpRequest(
@@ -85,6 +92,7 @@ export async function handleModernMcpRequest(
       resultType: "complete",
       tools: [
         ...(context.projectedTools ?? []).map(modernProjectedTool),
+        ...(context.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS.map(modernSkillTool) : []),
         modernExecTool(context.execSpec),
       ],
       ttlMs: 0,
@@ -109,9 +117,19 @@ export async function handleModernMcpRequest(
 
     try {
       const projected = (context.projectedTools ?? []).find(tool => tool.name === name);
+      const skillDefinition = context.nativeSkillTools
+        ? SIDEBAND_SKILL_TOOL_DEFINITIONS.find(tool => tool.name === name)
+        : undefined;
       let result;
       if (projected) {
         result = await invokeProjectedNativeTool(context.bridge, projected, args);
+      } else if (skillDefinition && context.nativeSkillTools) {
+        result = await invokeSidebandSkillTool(
+          context.bridge,
+          context.nativeSkillTools,
+          skillDefinition.name,
+          args,
+        );
       } else if (name === "exec") {
         if (typeof args.code !== "string" || args.code.length === 0) {
           sendJson(res, 200, rpcError(id, -32602, "exec requires a non-empty string argument: code"));
@@ -141,6 +159,17 @@ export async function handleModernMcpRequest(
 
   sendJson(res, 404, rpcError(id, -32601, `Method not found: ${body.method}`));
   return true;
+}
+
+function modernSkillTool(
+  definition: (typeof SIDEBAND_SKILL_TOOL_DEFINITIONS)[number],
+): Record<string, unknown> {
+  return {
+    name: definition.name,
+    title: definition.title,
+    description: definition.description,
+    inputSchema: skillToolJsonSchema(definition),
+  };
 }
 
 function modernProjectedTool(tool: ProjectedNativeTool): Record<string, unknown> {

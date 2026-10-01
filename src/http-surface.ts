@@ -10,6 +10,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { CodexTurnBridge } from "./bridge.js";
 import { handleModernMcpRequest } from "./mcp/modern.js";
 import type { ProjectedNativeTool } from "./mcp/projected-tools.js";
+import type { NativeSkillTools } from "./mcp/skill-tools.js";
 import { handleProviderHttpRequest } from "./provider/http.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 
@@ -27,6 +28,7 @@ export class SidebandHttpSurface {
   #mcpServer?: McpServer;
   #execSpec?: ExecToolSpec;
   #projectedTools: ProjectedNativeTool[] = [];
+  #nativeSkillTools?: NativeSkillTools;
   #port?: number;
 
   constructor(options: SidebandHttpSurfaceOptions) {
@@ -55,10 +57,12 @@ export class SidebandHttpSurface {
     server: McpServer,
     execSpec: ExecToolSpec,
     projectedTools: ProjectedNativeTool[] = [],
+    nativeSkillTools?: NativeSkillTools,
   ): void {
     this.#mcpServer = server;
     this.#execSpec = execSpec;
     this.#projectedTools = projectedTools;
+    this.#nativeSkillTools = nativeSkillTools;
   }
 
   async start(): Promise<void> {
@@ -90,6 +94,7 @@ export class SidebandHttpSurface {
             bridge: this.#bridge,
             execSpec: this.#execSpec,
             projectedTools: this.#projectedTools,
+            nativeSkillTools: this.#nativeSkillTools,
           })
         ) {
           return;
@@ -140,6 +145,7 @@ export class SidebandHttpSurface {
     this.#mcpServer = undefined;
     this.#execSpec = undefined;
     this.#projectedTools = [];
+    this.#nativeSkillTools = undefined;
     if (mcpServer) await mcpServer.close();
 
     const server = this.#server;
