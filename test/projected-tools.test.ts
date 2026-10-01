@@ -37,22 +37,20 @@ describe("projected Codex native tools", () => {
       "write_stdin",
       "apply_patch",
       "view_image",
-      "node_repl",
-      "node_repl_reset",
-      "node_repl_add_node_module_dir",
-      "cua_repl",
-      "cua_repl_reset",
-      "cua_repl_add_node_module_dir",
+      "mcp__node_repl__js",
+      "mcp__node_repl__js_reset",
+      "mcp__node_repl__js_add_node_module_dir",
+      "mcp__codex_apps__fkn_codex_mcp__cua_repl__js",
+      "mcp__codex_apps__fkn_codex_mcp__cua_repl__js_reset",
+      "mcp__codex_apps__fkn_codex_mcp__cua_repl__js_add_node_module_dir",
     ]);
-    expect(projected.find(tool => tool.name === "cua_repl")?.nativeName).toBe(
+    expect(
+      projected.find(tool => tool.name.endsWith("cua_repl__js"))?.nativeName,
+    ).toBe(
       "mcp__codex_apps__fkn_codex_mcp__cua_repl__js",
     );
-    expect(projected.find(tool => tool.name === "node_repl")?.description).toContain(
-      "call this tool directly as `node_repl`",
-    );
-    expect(projected.find(tool => tool.name === "cua_repl")?.description).toContain(
-      "call this tool directly as `cua_repl`",
-    );
+    expect(projected.find(tool => tool.name === "mcp__node_repl__js")?.description).toBe("NODE");
+    expect(projected.find(tool => tool.name.endsWith("cua_repl__js"))?.description).toBe("CUA");
     expect(projected.some(tool => /goal|mail/i.test(tool.name))).toBe(false);
   });
 

@@ -61,6 +61,7 @@ interface ProjectionDefinition {
   title: string;
   inputSchema: ZodType;
   resolveNativeName(inventory: NativeToolMetadata[]): string | undefined;
+  exposeNativeName?: boolean;
   adaptDescription?(description: string): string;
   mapArguments?(arguments_: unknown): unknown;
 }
@@ -75,21 +76,21 @@ const DEFINITIONS: ProjectionDefinition[] = [
     mapArguments: arguments_ => applyPatchSchema.parse(arguments_).patch,
   },
   exact("view_image", "Codex view image", viewImageSchema),
-  exact("node_repl", "Codex Node REPL", replSchema, "mcp__node_repl__js"),
-  exact("node_repl_reset", "Reset Codex Node REPL", emptySchema, "mcp__node_repl__js_reset"),
+  exact("mcp__node_repl__js", "Codex Node REPL", replSchema),
+  exact("mcp__node_repl__js_reset", "Reset Codex Node REPL", emptySchema),
   exact(
-    "node_repl_add_node_module_dir",
+    "mcp__node_repl__js_add_node_module_dir",
     "Add Node module directory",
     addNodeModuleDirSchema,
-    "mcp__node_repl__js_add_node_module_dir",
   ),
-  suffix("cua_repl", "Codex Computer Use REPL", replSchema, "cua_repl__js"),
-  suffix("cua_repl_reset", "Reset Codex Computer Use REPL", emptySchema, "cua_repl__js_reset"),
+  suffix("cua_repl", "Codex Computer Use REPL", replSchema, "cua_repl__js", true),
+  suffix("cua_repl_reset", "Reset Codex Computer Use REPL", emptySchema, "cua_repl__js_reset", true),
   suffix(
     "cua_repl_add_node_module_dir",
     "Add Computer Use Node module directory",
     addNodeModuleDirSchema,
     "cua_repl__js_add_node_module_dir",
+    true,
   ),
 ];
 
@@ -113,11 +114,13 @@ function suffix(
   title: string,
   inputSchema: ZodType,
   nativeSuffix: string,
+  exposeNativeName = false,
 ): ProjectionDefinition {
   return {
     name,
     title,
     inputSchema,
+    exposeNativeName,
     resolveNativeName: inventory => chooseNativeBySuffix(inventory, nativeSuffix),
   };
 }
@@ -151,18 +154,11 @@ export function selectProjectedNativeTools(
     const native = byName.get(nativeName);
     if (!native) return [];
 
-    const nativeDescription =
-      definition.adaptDescription?.(native.description) ?? native.description;
-    const description =
-      nativeName === definition.name
-        ? nativeDescription
-        : `${nativeDescription}\n\nSideband projection: call this tool directly as \`${definition.name}\`; \`${nativeName}\` is the underlying Codex runtime tool name.`;
-
     return [{
-      name: definition.name,
+      name: definition.exposeNativeName ? nativeName : definition.name,
       title: definition.title,
       nativeName,
-      description,
+      description: definition.adaptDescription?.(native.description) ?? native.description,
       inputSchema: definition.inputSchema,
       mapArguments: definition.mapArguments ?? (arguments_ => definition.inputSchema.parse(arguments_)),
     }];
@@ -181,7 +177,7 @@ export async function discoverProjectedNativeTools(
   // Some MCP/plugin tools are attached after the first provider/tool cycle.
   // One targeted refresh lets those late-bound canonical tools (notably CUA)
   // join the ChatGPT-facing surface without serializing the full ALL_TOOLS list.
-  if (!projected.some(tool => tool.name === "cua_repl")) {
+  if (!projected.some(tool => /cua_repl__js$/i.test(tool.nativeName))) {
     inventory = mergeInventory(inventory, await discoverCandidateInventory(bridge));
     projected = selectProjectedNativeTools(inventory);
   }

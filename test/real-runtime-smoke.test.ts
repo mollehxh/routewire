@@ -29,12 +29,13 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(listedNames).toContain("exec");
         expect(listedNames).toContain("exec_command");
         expect(listedNames).toContain("apply_patch");
-        expect(listedNames).toContain("node_repl");
-        expect(listedNames).toContain("cua_repl");
+        expect(listedNames).toContain("mcp__node_repl__js");
+        const cuaToolName = listedNames.find(name => /cua_repl__js$/i.test(name));
+        expect(cuaToolName).toBeTruthy();
         expect(listed.tools.find(tool => tool.name === "exec")?.description).toContain(
           "exec_command",
         );
-        expect(listed.tools.find(tool => tool.name === "node_repl")?.description).toContain(
+        expect(listed.tools.find(tool => tool.name === "mcp__node_repl__js")?.description).toContain(
           "persistent `node_repl`",
         );
 
@@ -108,7 +109,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(discoveryText).toContain('"modelTools":[]');
 
         const browser = await client.callTool({
-          name: "node_repl",
+          name: "mcp__node_repl__js",
           arguments: {
             code: "nodeRepl.write('SIDEBAND_BROWSER_OK')",
             title: "Sideband Browser smoke",
@@ -121,7 +122,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         expect(browserText).toContain("SIDEBAND_BROWSER_OK");
 
         const cua = await client.callTool({
-          name: "cua_repl",
+          name: cuaToolName!,
           arguments: {
             code: "await cua.getState();",
             title: "Sideband CUA smoke",
