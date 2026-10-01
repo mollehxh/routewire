@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   bridgeResultFromCodexOutput,
   extractCustomToolCallOutput,
@@ -16,6 +18,8 @@ type ProviderResponder = (reply: ProviderReply) => void;
 
 interface ActiveCall {
   callId: string;
+  requestFingerprint: string;
+  providerReply: Extract<ProviderReply, { kind: "tool_call" }>;
   resolve: (result: BridgeCallResult) => void;
   reject: (error: Error) => void;
 }
@@ -27,6 +31,7 @@ export class CodexTurnBridge {
   #resolveReady!: (spec: ExecToolSpec) => void;
   #rejectReady!: (error: Error) => void;
   #pendingModelReply?: ProviderResponder;
+  #pendingModelRequestFingerprint?: string;
   #activeCall?: ActiveCall;
   #callCounter = 0;
   #closed = false;
@@ -58,11 +63,30 @@ export class CodexTurnBridge {
       this.#resolveReady(spec);
     }
 
+    const requestFingerprint = modelRequestFingerprint(body);
+
     if (this.#pendingModelReply) {
+      if (requestFingerprint === this.#pendingModelRequestFingerprint) {
+        // Codex reconnects and retries the same Responses request if the SSE
+        // stream disappears while Sideband is waiting for ChatGPT's next MCP
+        // call. Rebind the pending reply to the newest stream instead of
+        // treating the retry as a concurrent model request.
+        this.#pendingModelReply = respond;
+        return;
+      }
       throw new Error("Codex opened a second model request before Sideband answered the first");
     }
 
     if (this.#activeCall) {
+      if (requestFingerprint === this.#activeCall.requestFingerprint) {
+        // The previous stream may have disappeared after Sideband emitted the
+        // tool call but before Codex accepted the completed response. Replay
+        // the exact same call id/input on the retried request so the bridge
+        // remains idempotent from Codex's point of view.
+        respond(this.#activeCall.providerReply);
+        return;
+      }
+
       const output = extractCustomToolCallOutput(body, this.#activeCall.callId);
       if (output === undefined) {
         throw new Error(
@@ -76,6 +100,7 @@ export class CodexTurnBridge {
     }
 
     this.#pendingModelReply = respond;
+    this.#pendingModelRequestFingerprint = requestFingerprint;
   }
 
   invokeExec(code: string): Promise<BridgeCallResult> {
@@ -88,19 +113,32 @@ export class CodexTurnBridge {
 
     const callId = `sideband-${++this.#callCounter}`;
     const respond = this.#pendingModelReply;
+    const requestFingerprint = this.#pendingModelRequestFingerprint;
     this.#pendingModelReply = undefined;
+    this.#pendingModelRequestFingerprint = undefined;
+    if (!requestFingerprint) {
+      return Promise.reject(new Error("Codex pending model request fingerprint is missing"));
+    }
+
+    const providerReply: Extract<ProviderReply, { kind: "tool_call" }> = {
+      kind: "tool_call",
+      callId,
+      namespace: "functions",
+      name: "exec",
+      input: code,
+    };
 
     return new Promise<BridgeCallResult>((resolve, reject) => {
-      this.#activeCall = { callId, resolve, reject };
+      this.#activeCall = {
+        callId,
+        requestFingerprint,
+        providerReply,
+        resolve,
+        reject,
+      };
 
       try {
-        respond({
-          kind: "tool_call",
-          callId,
-          namespace: "functions",
-          name: "exec",
-          input: code,
-        });
+        respond(providerReply);
       } catch (error) {
         this.#activeCall = undefined;
         reject(error instanceof Error ? error : new Error(String(error)));
@@ -120,6 +158,30 @@ export class CodexTurnBridge {
 
     const respond = this.#pendingModelReply;
     this.#pendingModelReply = undefined;
+    this.#pendingModelRequestFingerprint = undefined;
     if (respond) respond({ kind: "complete", text: reason });
   }
+}
+
+function modelRequestFingerprint(body: Record<string, unknown>): string {
+  // client_metadata contains transport/session metadata that can legitimately
+  // change across retries without changing the model-visible request. The
+  // remaining request body identifies the logical Responses request.
+  const semanticBody = Object.fromEntries(
+    Object.entries(body).filter(([key]) => key !== "client_metadata"),
+  );
+  return createHash("sha256").update(stableStringify(semanticBody)).digest("hex");
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableStringify(item)).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }

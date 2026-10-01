@@ -131,7 +131,13 @@ describe("Responses-compatible provider HTTP surface", () => {
     const rejected = await fetch(`${baseUrl}/v1/responses`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(modelRequest()),
+      body: JSON.stringify({
+        ...modelRequest(),
+        input: [
+          ...modelRequest().input,
+          { type: "message", role: "user", content: "genuinely different request" },
+        ],
+      }),
     });
     const rejectedSse = await rejected.text();
     expect(rejected.status).toBe(200);
@@ -142,5 +148,63 @@ describe("Responses-compatible provider HTTP surface", () => {
 
     bridge.close("test complete");
     await firstResponse;
+  });
+
+  it("rebinds an identical /responses retry after the original SSE stream disconnects", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    const server = createServer(async (req, res) => {
+      if (!(await handleProviderHttpRequest(req, res, bridge))) {
+        res.writeHead(404).end();
+      }
+    });
+    servers.push(server);
+    const baseUrl = await listen(server);
+    const request = modelRequest();
+
+    const controller = new AbortController();
+    const abandoned = await fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    });
+    await bridge.ready();
+    controller.abort();
+    await abandoned.text().catch(() => undefined);
+
+    const retryResponse = fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...request,
+        client_metadata: { retry_attempt: 1 },
+      }),
+    });
+
+    const toolResult = bridge.invokeExec("text('retry-ok');");
+    const retrySse = await retryResponse.then(response => response.text());
+    expect(retrySse).toContain('"type":"custom_tool_call"');
+    expect(retrySse).toContain("retry-ok");
+
+    const callIdMatch = /"call_id":"([^"]+)"/.exec(retrySse);
+    expect(callIdMatch?.[1]).toBeTruthy();
+    const outputResponse = fetch(`${baseUrl}/v1/responses`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        modelRequest({
+          callId: callIdMatch![1],
+          output: [{ type: "input_text", text: "retry-output" }],
+        }),
+      ),
+    });
+
+    await expect(toolResult).resolves.toMatchObject({
+      content: [{ type: "text", text: "retry-output" }],
+      isError: false,
+    });
+
+    bridge.close("test complete");
+    await outputResponse;
   });
 });

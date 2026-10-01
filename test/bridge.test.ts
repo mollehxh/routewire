@@ -144,4 +144,75 @@ describe("CodexTurnBridge", () => {
     void bridge.invokeExec("text('one');");
     await expect(bridge.invokeExec("text('two');")).rejects.toThrow(/already active/i);
   });
+
+  it("rebinds an identical pending Codex request after a provider-stream retry", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    const abandonedReplies: ProviderReply[] = [];
+    const retryReplies: ProviderReply[] = [];
+    const request = modelRequest();
+
+    bridge.acceptModelRequest(request, reply => abandonedReplies.push(reply));
+    await bridge.ready();
+    bridge.acceptModelRequest(
+      {
+        ...request,
+        client_metadata: { retry: "transport metadata may differ" },
+      },
+      reply => retryReplies.push(reply),
+    );
+
+    void bridge.invokeExec("text('after-reconnect');");
+
+    expect(abandonedReplies).toHaveLength(0);
+    expect(retryReplies).toHaveLength(1);
+    expect(retryReplies[0]).toMatchObject({
+      kind: "tool_call",
+      callId: "sideband-1",
+    });
+  });
+
+  it("replays the same active tool call when Codex retries the request that produced it", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    const firstReplies: ProviderReply[] = [];
+    const retryReplies: ProviderReply[] = [];
+    const request = modelRequest();
+
+    bridge.acceptModelRequest(request, reply => firstReplies.push(reply));
+    await bridge.ready();
+    const call = bridge.invokeExec("text('once');");
+    expect(firstReplies).toHaveLength(1);
+    const emitted = firstReplies[0];
+    if (emitted.kind !== "tool_call") throw new Error("expected tool_call");
+
+    bridge.acceptModelRequest(request, reply => retryReplies.push(reply));
+    expect(retryReplies).toEqual([emitted]);
+
+    bridge.acceptModelRequest(
+      modelRequest({
+        callId: emitted.callId,
+        output: [{ type: "input_text", text: "eventual-output" }],
+      }),
+      () => undefined,
+    );
+
+    await expect(call).resolves.toMatchObject({
+      content: [{ type: "text", text: "eventual-output" }],
+    });
+  });
+
+  it("still rejects a genuinely different model request while one is pending", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    bridge.acceptModelRequest(modelRequest(), () => undefined);
+    await bridge.ready();
+
+    expect(() =>
+      bridge.acceptModelRequest(
+        {
+          ...modelRequest(),
+          input: [...modelRequest().input, { type: "message", role: "user", content: "different" }],
+        },
+        () => undefined,
+      ),
+    ).toThrow(/second model request/i);
+  });
 });
