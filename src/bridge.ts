@@ -6,11 +6,15 @@ import {
 } from "./provider/context.js";
 import {
   bridgeResultFromCodexOutput,
+  extractAgentMessages,
   extractCustomToolCallOutput,
   extractExecToolSpec,
+  extractFunctionCallOutput,
+  extractFunctionToolSpecs,
   isRecord,
   type BridgeCallResult,
   type ExecToolSpec,
+  type FunctionToolSpec,
   type ProviderReply,
 } from "./provider/protocol.js";
 
@@ -31,6 +35,7 @@ interface ActiveCall {
 export class CodexTurnBridge {
   readonly #model: string;
   #execSpec?: ExecToolSpec;
+  #collaborationTools: FunctionToolSpec[] = [];
   #readyPromise: Promise<ExecToolSpec>;
   #resolveReady!: (spec: ExecToolSpec) => void;
   #rejectReady!: (error: Error) => void;
@@ -38,6 +43,7 @@ export class CodexTurnBridge {
   #pendingModelRequestFingerprint?: string;
   #activeCall?: ActiveCall;
   #operationalContext?: CodexOperationalContext;
+  #seenAgentMessages = new Set<string>();
   #callCounter = 0;
   #closed = false;
 
@@ -47,6 +53,10 @@ export class CodexTurnBridge {
       this.#resolveReady = resolve;
       this.#rejectReady = reject;
     });
+  }
+
+  get model(): string {
+    return this.#model;
   }
 
   ready(): Promise<ExecToolSpec> {
@@ -60,6 +70,10 @@ export class CodexTurnBridge {
     return structuredClone(this.#operationalContext);
   }
 
+  collaborationTools(): FunctionToolSpec[] {
+    return structuredClone(this.#collaborationTools);
+  }
+
   acceptModelRequest(body: unknown, respond: ProviderResponder): void {
     if (this.#closed) throw new Error("Sideband bridge is closed");
     if (!isRecord(body)) throw new Error("Codex provider request must be an object");
@@ -70,6 +84,8 @@ export class CodexTurnBridge {
     }
 
     const spec = extractExecToolSpec(body);
+    const collaborationTools = extractFunctionToolSpecs(body, "collaboration");
+    if (collaborationTools.length > 0) this.#collaborationTools = collaborationTools;
     if (spec && !this.#execSpec) {
       this.#execSpec = spec;
       this.#resolveReady(spec);
@@ -114,7 +130,10 @@ export class CodexTurnBridge {
         return;
       }
 
-      const output = extractCustomToolCallOutput(body, this.#activeCall.callId);
+      const output =
+        this.#activeCall.providerReply.callType === "custom"
+          ? extractCustomToolCallOutput(body, this.#activeCall.callId)
+          : extractFunctionCallOutput(body, this.#activeCall.callId);
       if (output === undefined) {
         throw new Error(
           `Codex provider request did not contain output for active call ${this.#activeCall.callId}`,
@@ -123,7 +142,16 @@ export class CodexTurnBridge {
 
       const activeCall = this.#activeCall;
       this.#activeCall = undefined;
-      activeCall.resolve(bridgeResultFromCodexOutput(output));
+      const result = bridgeResultFromCodexOutput(output);
+      result.content.push(
+        ...extractAgentMessages(body).flatMap(message => {
+          const key = message.id ?? `text:${message.text}`;
+          if (this.#seenAgentMessages.has(key)) return [];
+          this.#seenAgentMessages.add(key);
+          return [{ type: "text" as const, text: message.text }];
+        }),
+      );
+      activeCall.resolve(result);
     }
 
     this.#pendingModelReply = respond;
@@ -149,10 +177,66 @@ export class CodexTurnBridge {
 
     const providerReply: Extract<ProviderReply, { kind: "tool_call" }> = {
       kind: "tool_call",
+      callType: "custom",
       callId,
       namespace: "functions",
       name: "exec",
       input: code,
+      arguments: "",
+    };
+
+    return new Promise<BridgeCallResult>((resolve, reject) => {
+      this.#activeCall = {
+        callId,
+        requestFingerprint,
+        providerReply,
+        resolve,
+        reject,
+      };
+
+      try {
+        respond(providerReply);
+      } catch (error) {
+        this.#activeCall = undefined;
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  invokeFunction(
+    namespace: string,
+    name: string,
+    arguments_: Record<string, unknown>,
+  ): Promise<BridgeCallResult> {
+    if (this.#closed) return Promise.reject(new Error("Sideband bridge is closed"));
+    if (this.#activeCall) return Promise.reject(new Error("A Codex tool call is already active"));
+    if (!this.#pendingModelReply) {
+      return Promise.reject(new Error("Codex is not currently waiting for a model response"));
+    }
+    if (
+      namespace === "collaboration" &&
+      !this.#collaborationTools.some(tool => tool.name === name)
+    ) {
+      return Promise.reject(new Error(`Codex collaboration tool is not available: ${name}`));
+    }
+
+    const callId = `sideband-${++this.#callCounter}`;
+    const respond = this.#pendingModelReply;
+    const requestFingerprint = this.#pendingModelRequestFingerprint;
+    this.#pendingModelReply = undefined;
+    this.#pendingModelRequestFingerprint = undefined;
+    if (!requestFingerprint) {
+      return Promise.reject(new Error("Codex pending model request fingerprint is missing"));
+    }
+
+    const providerReply: Extract<ProviderReply, { kind: "tool_call" }> = {
+      kind: "tool_call",
+      callType: "function",
+      callId,
+      namespace,
+      name,
+      input: "",
+      arguments: JSON.stringify(arguments_),
     };
 
     return new Promise<BridgeCallResult>((resolve, reject) => {

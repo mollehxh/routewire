@@ -9,7 +9,7 @@ export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
     'name="Sideband"',
     `base_url="${options.providerBaseUrl}"`,
     'wire_api="responses"',
-    "requires_openai_auth=false",
+    "requires_openai_auth=true",
     "supports_websockets=false",
   ].join(",");
 
@@ -24,9 +24,9 @@ export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
     "-c",
     "analytics.enabled=false",
     "-c",
-    "agents.enabled=false",
+    "agents.enabled=true",
     "-c",
-    "features.multi_agent_v2.enabled=false",
+    "features.multi_agent_v2.enabled=true",
   ];
 
   if (options.dangerFullAccess) {

@@ -13,6 +13,11 @@ import {
   invokeBootstrap,
   SIDEBAND_BOOTSTRAP_TOOL,
 } from "./bootstrap.js";
+import {
+  collaborationToolJsonSchema,
+  invokeCollaborationTool,
+  type CollaborationTool,
+} from "./collaboration-tools.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
@@ -33,6 +38,7 @@ export interface ModernMcpContext {
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
   nativeSkillTools?: NativeSkillTools;
+  collaborationTools?: CollaborationTool[];
 }
 
 export async function handleModernMcpRequest(
@@ -104,6 +110,7 @@ export async function handleModernMcpRequest(
       tools: [
         modernBootstrapTool(),
         ...(context.projectedTools ?? []).map(modernProjectedTool),
+        ...(context.collaborationTools ?? []).map(modernCollaborationTool),
         ...(context.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS.map(modernSkillTool) : []),
         modernExecTool(context.execSpec),
       ],
@@ -129,6 +136,7 @@ export async function handleModernMcpRequest(
 
     try {
       const projected = (context.projectedTools ?? []).find(tool => tool.name === name);
+      const collaboration = (context.collaborationTools ?? []).find(tool => tool.name === name);
       const skillDefinition = context.nativeSkillTools
         ? SIDEBAND_SKILL_TOOL_DEFINITIONS.find(tool => tool.name === name)
         : undefined;
@@ -137,6 +145,8 @@ export async function handleModernMcpRequest(
         result = await invokeBootstrap(context.bridge, context.nativeSkillTools);
       } else if (projected) {
         result = await invokeProjectedNativeTool(context.bridge, projected, args);
+      } else if (collaboration) {
+        result = await invokeCollaborationTool(context.bridge, collaboration, args);
       } else if (skillDefinition && context.nativeSkillTools) {
         result = await invokeSidebandSkillTool(
           context.bridge,
@@ -201,6 +211,15 @@ function modernProjectedTool(tool: ProjectedNativeTool): Record<string, unknown>
     title: tool.title,
     description: tool.description,
     inputSchema: projectedToolJsonSchema(tool),
+  };
+}
+
+function modernCollaborationTool(tool: CollaborationTool): Record<string, unknown> {
+  return {
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    inputSchema: collaborationToolJsonSchema(tool),
   };
 }
 

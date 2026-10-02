@@ -1,14 +1,22 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { CodexTurnBridge } from "../bridge.js";
+import {
+  isLunaRequest,
+  proxyLunaRequest,
+  type LunaProxyOptions,
+} from "./luna.js";
+import { isRecord } from "./protocol.js";
 import type { ProviderReply } from "./protocol.js";
 
 let providerRequestSequence = 0;
+const rootThreadIds = new WeakMap<CodexTurnBridge, string>();
 
 export async function handleProviderHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   bridge: CodexTurnBridge,
+  lunaOptions: LunaProxyOptions = {},
 ): Promise<boolean> {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
 
@@ -32,6 +40,35 @@ export async function handleProviderHttpRequest(
     process.stderr.write(
       `[sideband] provider request #${requestId}: ${JSON.stringify(providerRequestSummary(body))}\n`,
     );
+  }
+
+  if (isRecord(body) && body.model === bridge.model) {
+    const threadId = singleHeader(req.headers["thread-id"]);
+    if (threadId && !rootThreadIds.has(bridge)) rootThreadIds.set(bridge, threadId);
+  }
+
+  if (isLunaRequest(body)) {
+    try {
+      const rootThreadId = rootThreadIds.get(bridge);
+      const parentThreadId = singleHeader(req.headers["x-codex-parent-thread-id"]);
+      await proxyLunaRequest(req, res, body, {
+        ...lunaOptions,
+        syntheticRootChild:
+          lunaOptions.syntheticRootChild ?? Boolean(rootThreadId && parentThreadId === rootThreadId),
+      });
+    } catch (error) {
+      const message = errorMessage(error);
+      logProviderError(body, message);
+      sendFailedStream(res, "sideband_luna_proxy_error", message);
+    }
+    return true;
+  }
+
+  if (isRecord(body) && body.model !== bridge.model) {
+    const message = `Unsupported Sideband model request: ${String(body.model)}`;
+    logProviderError(body, message);
+    sendFailedStream(res, "sideband_model_not_allowed", message);
+    return true;
   }
 
   res.writeHead(200, {
@@ -70,19 +107,7 @@ export async function handleProviderHttpRequest(
     logProviderError(body, message);
     if (!res.writableEnded) {
       const responseId = `resp_sideband_error_${Date.now()}`;
-      const failed = {
-        type: "response.failed",
-        response: {
-          id: responseId,
-          error: {
-            code: "sideband_bridge_error",
-            message,
-          },
-        },
-      };
-      res.write(`event: response.failed\n`);
-      res.write(`data: ${JSON.stringify(failed)}\n\n`);
-      res.end();
+      sendFailedEvent(res, responseId, "sideband_bridge_error", message);
     }
   }
 
@@ -107,16 +132,27 @@ function replyEvents(reply: ProviderReply): SseEvent[] {
 
   const output: SseEvent =
     reply.kind === "tool_call"
-      ? {
-          type: "response.output_item.done",
-          item: {
-            type: "custom_tool_call",
-            call_id: reply.callId,
-            namespace: reply.namespace,
-            name: reply.name,
-            input: reply.input,
-          },
-        }
+      ? reply.callType === "custom"
+        ? {
+            type: "response.output_item.done",
+            item: {
+              type: "custom_tool_call",
+              call_id: reply.callId,
+              namespace: reply.namespace,
+              name: reply.name,
+              input: reply.input,
+            },
+          }
+        : {
+            type: "response.output_item.done",
+            item: {
+              type: "function_call",
+              call_id: reply.callId,
+              namespace: reply.namespace,
+              name: reply.name,
+              arguments: reply.arguments,
+            },
+          }
       : {
           type: "response.output_item.done",
           item: {
@@ -163,6 +199,34 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
   res.end(body);
 }
 
+function sendFailedStream(res: ServerResponse, code: string, message: string): void {
+  if (res.writableEnded) return;
+  res.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+  });
+  sendFailedEvent(res, `resp_sideband_error_${Date.now()}`, code, message);
+}
+
+function sendFailedEvent(
+  res: ServerResponse,
+  responseId: string,
+  code: string,
+  message: string,
+): void {
+  const failed = {
+    type: "response.failed",
+    response: {
+      id: responseId,
+      error: { code, message },
+    },
+  };
+  res.write(`event: response.failed\n`);
+  res.write(`data: ${JSON.stringify(failed)}\n\n`);
+  res.end();
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -207,6 +271,7 @@ function providerReplySummary(reply: ProviderReply): Record<string, unknown> {
   return reply.kind === "tool_call"
     ? {
         kind: reply.kind,
+        callType: reply.callType,
         callId: reply.callId,
         namespace: reply.namespace,
         name: reply.name,
@@ -216,4 +281,8 @@ function providerReplySummary(reply: ProviderReply): Record<string, unknown> {
 
 function providerDebugEnabled(): boolean {
   return process.env.SIDEBAND_DEBUG === "1";
+}
+
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }

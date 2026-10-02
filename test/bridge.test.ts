@@ -215,4 +215,101 @@ describe("CodexTurnBridge", () => {
       ),
     ).toThrow(/second model request/i);
   });
+
+  it("returns each native agent message once with the next completed tool call", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let reply: ProviderReply | undefined;
+    const followupReplies: ProviderReply[] = [];
+    const request = modelRequest();
+    request.input[0] = {
+      type: "additional_tools",
+      tools: [
+        ...(request.input[0] as { tools: unknown[] }).tools,
+        {
+          type: "namespace",
+          name: "collaboration",
+          tools: [{
+            type: "function",
+            name: "wait_agent",
+            description: "Wait for an agent.",
+            parameters: { type: "object", properties: {} },
+          }],
+        },
+      ],
+    };
+    bridge.acceptModelRequest(request, value => {
+      reply = value;
+    });
+    await bridge.ready();
+
+    const call = bridge.invokeFunction("collaboration", "wait_agent", { timeout_ms: 10_000 });
+    if (!reply || reply.kind !== "tool_call") throw new Error("expected collaboration call");
+
+    bridge.acceptModelRequest(
+      {
+        ...request,
+        input: [
+          ...request.input,
+          {
+            type: "function_call_output",
+            call_id: reply.callId,
+            output: '{"message":"Wait completed.","timed_out":false}',
+          },
+          {
+            type: "agent_message",
+            id: "agent-message-1",
+            content: [{
+              type: "input_text",
+              text: "Message Type: FINAL_ANSWER\nSender: /root/review\nPayload:\nREVIEW_OK",
+            }],
+          },
+        ],
+      },
+      value => followupReplies.push(value),
+    );
+
+    await expect(call).resolves.toEqual({
+      content: [
+        { type: "text", text: '{"message":"Wait completed.","timed_out":false}' },
+        {
+          type: "text",
+          text: "Message Type: FINAL_ANSWER\nSender: /root/review\nPayload:\nREVIEW_OK",
+        },
+      ],
+      isError: false,
+    });
+
+    const secondCall = bridge.invokeFunction("collaboration", "wait_agent", { timeout_ms: 10_000 });
+    const secondReply = followupReplies[0];
+    if (!secondReply || secondReply.kind !== "tool_call") {
+      throw new Error("expected second collaboration call");
+    }
+    bridge.acceptModelRequest(
+      {
+        ...request,
+        input: [
+          ...request.input,
+          {
+            type: "agent_message",
+            id: "agent-message-1",
+            content: [{
+              type: "input_text",
+              text: "Message Type: FINAL_ANSWER\nSender: /root/review\nPayload:\nREVIEW_OK",
+            }],
+          },
+          {
+            type: "function_call_output",
+            call_id: secondReply.callId,
+            output: '{"message":"Wait completed.","timed_out":true}',
+          },
+        ],
+      },
+      () => undefined,
+    );
+
+    await expect(secondCall).resolves.toEqual({
+      content: [{ type: "text", text: '{"message":"Wait completed.","timed_out":true}' }],
+      isError: false,
+    });
+  });
 });

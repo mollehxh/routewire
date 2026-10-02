@@ -12,8 +12,9 @@ describe("buildCodexArgs", () => {
     expect(args).toContain("gpt-5.6-sol");
     expect(args).toContain('model_provider="sideband"');
     expect(args.join(" ")).toContain("127.0.0.1:3210/v1");
-    expect(args).toContain("agents.enabled=false");
-    expect(args).toContain("features.multi_agent_v2.enabled=false");
+    expect(args.join(" ")).toContain("requires_openai_auth=true");
+    expect(args).toContain("agents.enabled=true");
+    expect(args).toContain("features.multi_agent_v2.enabled=true");
     expect(args).toContain("--ephemeral");
     expect(args.at(-1)).toBe("-");
     expect(args).not.toContain("--ignore-user-config");

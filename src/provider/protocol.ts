@@ -5,13 +5,28 @@ export interface ExecToolSpec {
   format?: unknown;
 }
 
+export interface FunctionToolSpec {
+  type: "function";
+  name: string;
+  description: string;
+  strict?: boolean;
+  parameters: Record<string, unknown>;
+}
+
+export interface AgentMessage {
+  id?: string;
+  text: string;
+}
+
 export type ProviderReply =
   | {
       kind: "tool_call";
+      callType: "custom" | "function";
       callId: string;
-      namespace: "functions";
-      name: "exec";
+      namespace: string;
+      name: string;
       input: string;
+      arguments: string;
     }
   | {
       kind: "complete";
@@ -79,6 +94,51 @@ export function extractExecToolSpec(body: unknown): ExecToolSpec | undefined {
   return undefined;
 }
 
+export function extractFunctionToolSpecs(
+  body: unknown,
+  namespaceName: string,
+): FunctionToolSpec[] {
+  if (!isRecord(body) || !Array.isArray(body.input)) return [];
+
+  for (const item of body.input) {
+    if (!isRecord(item) || item.type !== "additional_tools" || !Array.isArray(item.tools)) {
+      continue;
+    }
+
+    for (const namespace of item.tools) {
+      if (
+        !isRecord(namespace) ||
+        namespace.type !== "namespace" ||
+        namespace.name !== namespaceName ||
+        !Array.isArray(namespace.tools)
+      ) {
+        continue;
+      }
+
+      return namespace.tools.flatMap(tool => {
+        if (
+          !isRecord(tool) ||
+          tool.type !== "function" ||
+          typeof tool.name !== "string" ||
+          typeof tool.description !== "string" ||
+          !isRecord(tool.parameters)
+        ) {
+          return [];
+        }
+        return [{
+          type: "function" as const,
+          name: tool.name,
+          description: tool.description,
+          strict: typeof tool.strict === "boolean" ? tool.strict : undefined,
+          parameters: tool.parameters,
+        }];
+      });
+    }
+  }
+
+  return [];
+}
+
 export function extractCustomToolCallOutput(body: unknown, callId: string): unknown | undefined {
   if (!isRecord(body) || !Array.isArray(body.input)) return undefined;
 
@@ -93,6 +153,42 @@ export function extractCustomToolCallOutput(body: unknown, callId: string): unkn
   }
 
   return undefined;
+}
+
+export function extractFunctionCallOutput(body: unknown, callId: string): unknown | undefined {
+  if (!isRecord(body) || !Array.isArray(body.input)) return undefined;
+
+  for (const item of body.input) {
+    if (isRecord(item) && item.type === "function_call_output" && item.call_id === callId) {
+      return item.output;
+    }
+  }
+
+  return undefined;
+}
+
+export function extractAgentMessages(body: unknown): AgentMessage[] {
+  if (!isRecord(body) || !Array.isArray(body.input)) return [];
+
+  const messages: AgentMessage[] = [];
+  for (const item of body.input) {
+    if (!isRecord(item) || item.type !== "agent_message" || !Array.isArray(item.content)) continue;
+    const text = item.content
+      .flatMap(content =>
+        isRecord(content) && content.type === "input_text" && typeof content.text === "string"
+          ? [content.text]
+          : [],
+      )
+      .join("\n")
+      .trim();
+    if (text) {
+      messages.push({
+        id: typeof item.id === "string" ? item.id : undefined,
+        text,
+      });
+    }
+  }
+  return messages;
 }
 
 export function bridgeResultFromCodexOutput(output: unknown): BridgeCallResult {

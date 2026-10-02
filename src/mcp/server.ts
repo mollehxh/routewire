@@ -9,6 +9,10 @@ import {
   wrapExecCode,
 } from "../tool-policy.js";
 import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
+import {
+  invokeCollaborationTool,
+  type CollaborationTool,
+} from "./collaboration-tools.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
@@ -25,6 +29,7 @@ export interface CreateSidebandMcpServerOptions {
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
   nativeSkillTools?: NativeSkillTools;
+  collaborationTools?: CollaborationTool[];
 }
 
 export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions): McpServer {
@@ -67,6 +72,28 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
           content: result.content,
           isError: result.isError,
         };
+      },
+    );
+  }
+
+  for (const tool of options.collaborationTools ?? []) {
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      },
+      async (arguments_: unknown): Promise<CallToolResult> => {
+        try {
+          const result = await invokeCollaborationTool(options.bridge, tool, arguments_);
+          return { content: result.content, isError: result.isError };
+        } catch (error) {
+          return {
+            content: [{ type: "text", text: errorMessage(error) }],
+            isError: true,
+          };
+        }
       },
     );
   }

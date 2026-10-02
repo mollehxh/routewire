@@ -10,5 +10,6 @@ Skill handling:
 
 Tool use:
 - Prefer a directly exposed native Codex tool for a simple single operation.
+- Use the collaboration tools for subagent work. \`spawn_agent\` always creates a native \`gpt-6-luna\` child; only high, xhigh, and max reasoning are available.
 - Use \`exec\` when multiple native calls, batching, persistent JavaScript values, or control flow are useful, or when a needed native tool is available only through Code Mode.
 - Reuse context already obtained in this conversation instead of repeating discovery calls unnecessarily.`;
