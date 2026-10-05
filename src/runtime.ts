@@ -121,7 +121,7 @@ export async function startRoutewire(options: StartRoutewireOptions): Promise<Ro
   const codexExitWatch = codex.exited.then(exit => {
     if (!closing) {
       const error = startupComplete
-        ? new Error(exit.error?.message ?? `Codex process exited (code=${String(exit.code)}, signal=${String(exit.signal)})`)
+        ? new Error(exit.error?.message ?? codexExitMessage(exit, "Codex process exited"))
         : codexExitedBeforeReady(exit);
       emit({ type: "component", component: "codex", state: "error", detail: error.message });
       bridge.close(error.message);
@@ -258,9 +258,7 @@ export async function startRoutewire(options: StartRoutewireOptions): Promise<Ro
 
 function codexExitedBeforeReady(exit: CodexExit): Error {
   if (exit.error) return new Error(`Failed to start Codex: ${exit.error.message}`, { cause: exit.error });
-  return new Error(
-    `Codex exited before exposing its tool surface (code=${String(exit.code)}, signal=${String(exit.signal)})`,
-  );
+  return new Error(codexExitMessage(exit, "Codex exited before exposing its tool surface"));
 }
 
 function codexExitedDuringTunnelStartup(exit: CodexExit): Error {
@@ -269,9 +267,23 @@ function codexExitedDuringTunnelStartup(exit: CodexExit): Error {
       cause: exit.error,
     });
   }
-  return new Error(
-    `Codex exited while Routewire was starting the tunnel (code=${String(exit.code)}, signal=${String(exit.signal)})`,
-  );
+  return new Error(codexExitMessage(exit, "Codex exited while Routewire was starting the tunnel"));
+}
+
+function codexExitMessage(exit: CodexExit, prefix: string): string {
+  const status = `${prefix} (code=${String(exit.code)}, signal=${String(exit.signal)})`;
+  const detail = lastStderrLine(exit.stderrTail);
+  return detail ? `${status}: ${detail}` : status;
+}
+
+function lastStderrLine(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const lines = value
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  return lines.at(-1);
 }
 
 function delay(ms: number): Promise<void> {

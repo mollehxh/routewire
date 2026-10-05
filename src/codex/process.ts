@@ -25,6 +25,7 @@ export interface CodexExit {
   code: number | null;
   signal: NodeJS.Signals | null;
   error?: Error;
+  stderrTail?: string;
 }
 
 export interface CodexProcessHandle {
@@ -45,6 +46,11 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
 
   const env = { ...process.env };
   if (options.codexHome) env.CODEX_HOME = options.codexHome;
+  const noProxy = mergeNoProxy(env.NO_PROXY, env.no_proxy);
+  env.NO_PROXY = noProxy;
+  env.no_proxy = noProxy;
+
+  let stderrTail = "";
 
   const child = spawn(options.command ?? "codex", args, {
     cwd: options.cwd,
@@ -59,7 +65,9 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
     if (!options.quiet) process.stdout.write(`[codex stdout] ${String(chunk)}`);
   });
   child.stderr?.on("data", chunk => {
-    if (!options.quiet) process.stderr.write(`[codex stderr] ${String(chunk)}`);
+    const text = String(chunk);
+    stderrTail = appendTail(stderrTail, text);
+    if (!options.quiet) process.stderr.write(`[codex stderr] ${text}`);
   });
 
   child.stdin?.on("error", () => undefined);
@@ -73,8 +81,17 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
       resolve(value);
     };
 
-    child.once("error", error => finish({ code: null, signal: null, error }));
-    child.once("exit", (code, signal) => finish({ code, signal }));
+    child.once("error", error => finish({
+      code: null,
+      signal: null,
+      error,
+      stderrTail: stderrTail || undefined,
+    }));
+    child.once("close", (code, signal) => finish({
+      code,
+      signal,
+      stderrTail: stderrTail || undefined,
+    }));
   });
 
   return {
@@ -86,4 +103,22 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
       forceTerminateProcessTree(child);
     },
   };
+}
+
+const STDERR_TAIL_LIMIT = 16 * 1024;
+const LOCAL_NO_PROXY_HOSTS = ["127.0.0.1", "localhost", "::1"] as const;
+
+function mergeNoProxy(...values: Array<string | undefined>): string {
+  const entries = values
+    .flatMap(value => value?.split(",") ?? [])
+    .map(value => value.trim())
+    .filter(Boolean);
+  return [...new Set([...entries, ...LOCAL_NO_PROXY_HOSTS])].join(",");
+}
+
+function appendTail(current: string, next: string): string {
+  const combined = current + next;
+  return combined.length <= STDERR_TAIL_LIMIT
+    ? combined
+    : combined.slice(-STDERR_TAIL_LIMIT);
 }

@@ -65,6 +65,17 @@ describe("runtime failure recovery", () => {
     await expect(fetch(url)).rejects.toThrow();
   });
 
+  it("surfaces the final Codex stderr line when startup fails", async () => {
+    const {dir, command} = await helper(`process.stderr.write('ERROR: provider unavailable\\n'); process.exit(23);`);
+    await expect(startRoutewire({
+      cwd: dir,
+      codexHome: dir,
+      modelCatalog: [],
+      codexCommand: command,
+      quietCodex: true,
+    })).rejects.toThrow(/provider unavailable/);
+  });
+
   it("bounds startup when a live Codex never requests the provider", async () => {
     const {dir, command} = await helper("setInterval(()=>{},1000);");
     await expect(startRoutewire({cwd: dir, codexHome: dir, modelCatalog: [], codexCommand: command, quietCodex: true,
