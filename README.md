@@ -29,6 +29,19 @@ npx runwire
 Runwire starts the interactive TUI when attached to a terminal. In headless
 mode it prints the local MCP and provider endpoints.
 
+## Updates
+
+Interactive Runwire checks npm for a newer release at startup. The check is
+non-blocking, cached for one hour, and fails open when the registry is
+unavailable. When an update exists, Runwire offers two choices before the main
+menu: install the latest release now or continue with the current version.
+
+Continuing does not suppress the release, so Runwire offers the same update
+again on a later launch while the installed version is still outdated. Update
+installation uses the detected npm-compatible package manager and can be
+cancelled by quitting Runwire. Set `RUNWIRE_DISABLE_UPDATE_CHECK=1` to disable
+the startup check entirely.
+
 ## Usage
 
 ```text

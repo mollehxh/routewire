@@ -7,6 +7,7 @@ import {
 } from "./model-catalog.js";
 import type { RunwireRuntimeEvent } from "./runtime-events.js";
 import {RunwireInkApp, type RunwireInkState} from "./tui-ink.js";
+import type {RunwireUpdateInfo} from "./update.js";
 import {
   hasStoredApiKey,
   loadRunwireSettings,
@@ -20,6 +21,8 @@ const RESET = `${CSI}0m`;
 
 export type RunwireRuntimeState = "stopped" | "starting" | "running" | "stopping" | "error";
 type View =
+  | "update_check"
+  | "update"
   | "menu"
   | "settings"
   | "settings_connection"
@@ -79,6 +82,8 @@ export interface RunwireTuiOptions {
   onStart?: (settings: RunwireSettings) => void;
   onStop?: () => void;
   onQuit?: () => void;
+  checkingForUpdate?: boolean;
+  onUpdate?: () => void;
 }
 
 export class RunwireTui {
@@ -91,6 +96,7 @@ export class RunwireTui {
   readonly #onStart?: (settings: RunwireSettings) => void;
   readonly #onStop?: () => void;
   readonly #onQuit?: () => void;
+  readonly #onUpdate?: () => void;
   readonly #components = new Map<string, string>();
   readonly #active = new Map<string, Activity>();
   readonly #recent: Activity[] = [];
@@ -107,6 +113,7 @@ export class RunwireTui {
   #inputBuffer = "";
   #started = false;
   #ink?: InkInstance;
+  #update?: RunwireInkState["update"];
 
   constructor(options: RunwireTuiOptions) {
     this.#cwd = options.cwd;
@@ -118,6 +125,7 @@ export class RunwireTui {
     this.#onStart = options.onStart;
     this.#onStop = options.onStop;
     this.#onQuit = options.onQuit;
+    this.#onUpdate = options.onUpdate;
     const storedSettings = loadRunwireSettings();
     this.#settings = normalizeSettings({
       ...storedSettings,
@@ -126,6 +134,7 @@ export class RunwireTui {
         options.initialSettings?.allowedSubagentModels ?? storedSettings.allowedSubagentModels,
     });
     this.#apiKeyConfigured = options.externalApiKey === true || hasStoredApiKey();
+    if (options.checkingForUpdate) this.#view = "update_check";
   }
 
   settings(): RunwireSettings {
@@ -145,6 +154,36 @@ export class RunwireTui {
       this.#appliedSettings = settingsFingerprint(this.#settings);
       this.#credentialDirty = false;
     }
+    this.render();
+  }
+
+  setUpdateError(message: string): void {
+    if (!this.#update) return;
+    this.#update = {...this.#update, status: "error", message};
+    this.render();
+  }
+
+  showAvailableUpdate(update: RunwireUpdateInfo): void {
+    if (this.#view !== "update_check") return;
+    if (!this.#onUpdate) {
+      this.finishUpdateCheck();
+      return;
+    }
+    this.#update = {
+      currentVersion: update.currentVersion,
+      latestVersion: update.latestVersion,
+      command: update.action.display,
+      status: "available",
+    };
+    this.#view = "update";
+    this.#selection = 0;
+    this.render();
+  }
+
+  finishUpdateCheck(): void {
+    if (this.#view !== "update_check") return;
+    this.#view = "menu";
+    this.#selection = 0;
     this.render();
   }
 
@@ -339,6 +378,7 @@ export class RunwireTui {
       active: [...this.#active.values()].map(item => ({...item})),
       recent: this.#recent.map(item => ({...item})),
       agents: [...this.#agents.values()].map(agent => ({...agent})),
+      update: this.#update ? {...this.#update} : undefined,
     };
   }
 
@@ -349,6 +389,11 @@ export class RunwireTui {
     }
     if (key === "\u0003" || key === "q") {
       this.#onQuit?.();
+      return;
+    }
+    if (this.#view === "update_check") return;
+    if (this.#view === "update") {
+      this.#handleUpdateKey(key);
       return;
     }
     if (key === "\u001b") {
@@ -362,6 +407,23 @@ export class RunwireTui {
     else if (this.#view === "settings_codex") this.#handleCodexSettingsKey(key);
     else if (this.#view === "agent_models") this.#handleAgentModelsKey(key);
     else if (this.#view === "activity") this.#handleActivityKey(key);
+  }
+
+  #handleUpdateKey(key: string): void {
+    if (!this.#update || this.#update.status === "installing") return;
+    if (isUp(key)) this.#selection = wrap(this.#selection - 1, 2);
+    else if (isDown(key)) this.#selection = wrap(this.#selection + 1, 2);
+    else if (isEnter(key)) {
+      if (this.#selection === 0) {
+        if (!this.#onUpdate) return;
+        this.#update = {...this.#update, status: "installing", message: undefined};
+        this.#onUpdate?.();
+      } else {
+        this.#update = undefined;
+        this.#open("menu");
+      }
+    }
+    this.render();
   }
 
   #handleMenuKey(key: string): void {

@@ -47,6 +47,38 @@ afterEach(() => {
 });
 
 describe("Runwire Ink TUI", () => {
+  it("renders a non-blocking startup update check", () => {
+    const state = baseState();
+    state.runtimeState = "stopped";
+    state.view = "update_check";
+    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const frame = ui.lastFrame() ?? "";
+    expect(frame).toContain("Checking for updates");
+    expect(frame).toContain("q quit");
+    ui.unmount();
+  });
+
+  it("renders the startup update choice before the main menu", () => {
+    const state = baseState();
+    state.runtimeState = "stopped";
+    state.view = "update";
+    state.update = {
+      currentVersion: "0.1.0",
+      latestVersion: "0.2.0",
+      command: "npm install -g runwire@latest",
+      status: "available",
+    };
+    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const frame = ui.lastFrame() ?? "";
+    expect(frame).toContain("Update available");
+    expect(frame).toContain("0.1.0");
+    expect(frame).toContain("0.2.0");
+    expect(frame).toContain("Update now");
+    expect(frame).toContain("Continue with 0.1.0");
+    expect(frame).toContain("npm install -g runwire@latest");
+    ui.unmount();
+  });
+
   it("keeps the top level to Start, Settings, Activity, and Quit", () => {
     const state = baseState();
     state.runtimeState = "stopped";

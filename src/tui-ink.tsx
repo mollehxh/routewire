@@ -6,6 +6,8 @@ import type {RunwireSettings} from "./tui-settings.js";
 
 export type InkRuntimeState = "stopped" | "starting" | "running" | "stopping" | "error";
 export type InkView =
+  | "update_check"
+  | "update"
   | "menu"
   | "settings"
   | "settings_connection"
@@ -70,6 +72,13 @@ export interface RunwireInkState {
   active: InkActivity[];
   recent: InkActivity[];
   agents: InkAgentActivity[];
+  update?: {
+    currentVersion: string;
+    latestVersion: string;
+    command: string;
+    status: "available" | "installing" | "error";
+    message?: string;
+  };
 }
 
 export interface RunwireInkAppProps {
@@ -132,6 +141,43 @@ export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
     );
   }
 
+  if (state.view === "update_check") {
+    return (
+      <Box width="100%" height={terminalSize.rows} flexDirection="column" paddingX={2}>
+        <Box flexGrow={1} justifyContent="center" alignItems="center">
+          <Box flexDirection="column" alignItems="center">
+            <Text color={RUNWIRE_ACCENT} bold>{RUNWIRE_MARK}</Text>
+            <Text> </Text>
+            <Text bold>Checking for updates…</Text>
+          </Box>
+        </Box>
+        <Box justifyContent="center">
+          <Footer items={["q quit"]} permissions={state.settings.sandboxMode}/>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (state.view === "update" && state.update) {
+    return (
+      <Box width="100%" height={terminalSize.rows} flexDirection="column" paddingX={2}>
+        <Box flexGrow={1} justifyContent="center" alignItems="center">
+          <Box width={Math.min(62, terminalSize.columns - 6)} flexDirection="column">
+            <UpdateView state={state}/>
+          </Box>
+        </Box>
+        <Box justifyContent="center">
+          <Footer
+            items={state.update.status === "installing"
+              ? ["installing update…", "q quit"]
+              : ["↑↓ move", "enter select", "q quit"]}
+            permissions={state.settings.sandboxMode}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
   if (state.view === "activity") {
     return (
       <Box width="100%" height={terminalSize.rows} flexDirection="column" paddingX={2} paddingTop={1}>
@@ -179,6 +225,42 @@ export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
   }
 
   return null;
+}
+
+function UpdateView({state}: {state: RunwireInkState}) {
+  const update = state.update!;
+  const installing = update.status === "installing";
+  return (
+    <Box flexDirection="column" alignItems="center">
+      <Text color={RUNWIRE_ACCENT} bold>{RUNWIRE_MARK}</Text>
+      <Text> </Text>
+      <Text bold>Update available</Text>
+      <Text><Text dimColor>{update.currentVersion}</Text>  →  <Text color={RUNWIRE_ACCENT} bold>{update.latestVersion}</Text></Text>
+
+      <Box width={46} marginTop={2} flexDirection="column">
+        {installing ? (
+          <MenuRow label={`Installing ${update.latestVersion}…`} selected icon="…"/>
+        ) : (
+          <>
+            <MenuRow label="Update now" selected={state.selection === 0} icon="↑"/>
+            <MenuRow
+              label={`Continue with ${update.currentVersion}`}
+              selected={state.selection === 1}
+              icon="→"
+            />
+          </>
+        )}
+      </Box>
+
+      <Box width={52} marginTop={1} flexDirection="column">
+        <Text dimColor>{installing ? "Running" : "Update command"}</Text>
+        <Text color={RUNWIRE_ACCENT}>{update.command}</Text>
+        {update.status === "error" && update.message ? (
+          <Text color="red">Update failed: {update.message}</Text>
+        ) : null}
+      </Box>
+    </Box>
+  );
 }
 
 function MenuView({state}: {state: RunwireInkState}) {

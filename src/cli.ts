@@ -10,6 +10,7 @@ import { loadCodexModelCatalog } from "./model-catalog.js";
 import { startRunwire, type RunwireRuntime } from "./runtime.js";
 import { RunwireTui } from "./tui.js";
 import { apiKeyPath, hasStoredApiKey, type RunwireSettings } from "./tui-settings.js";
+import {checkForRunwireUpdate, installRunwireUpdate, type RunwireUpdateInfo} from "./update.js";
 
 const HELP = `runwire
 
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
 }
 
 export async function runInteractive(options: ReturnType<typeof parseCliOptions>): Promise<void> {
+  let availableUpdate: RunwireUpdateInfo | undefined;
   const model = options.model ?? "gpt-5.6-sol";
   const tunnelId = options.tunnelId ?? runwireEnv("RUNWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
   const tunnelApiKeyFile =
@@ -66,6 +68,7 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
   let runtime: RunwireRuntime | undefined;
   let closingRuntime = false;
   let quitting = false;
+  let updateAbort: AbortController | undefined;
   let quitResolve: (() => void) | undefined;
   let operation = Promise.resolve();
   let requestQuit = () => undefined;
@@ -93,13 +96,36 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
       });
     },
     onQuit: () => requestQuit(),
+    checkingForUpdate: true,
+    onUpdate: () => {
+      const update = availableUpdate;
+      if (!update) return;
+      const abort = new AbortController();
+      updateAbort = abort;
+      operation = operation.then(async () => {
+        try {
+          await installRunwireUpdate(update, {signal: abort.signal});
+          quitting = true;
+          tui.stop();
+          activeTui = undefined;
+          process.stdout.write(
+            `[runwire] Updated to ${update.latestVersion}. Restart Runwire to use the new version.\n`,
+          );
+          quitResolve?.();
+        } catch (error) {
+          if (!quitting) tui.setUpdateError(errorMessage(error));
+        } finally {
+          if (updateAbort === abort) updateAbort = undefined;
+        }
+      });
+    },
   });
   activeTui = tui;
-  tui.start();
 
   requestQuit = () => {
     if (quitting) return;
     quitting = true;
+    updateAbort?.abort();
     operation = operation.then(async () => {
       try {
         await stopRuntime();
@@ -110,6 +136,15 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
       }
     }).catch(error => process.stderr.write(`[runwire] ${errorMessage(error)}\n`)).then(() => undefined);
   };
+  tui.start();
+  void checkForRunwireUpdate().then(update => {
+    if (quitting) return;
+    availableUpdate = update;
+    if (update) tui.showAvailableUpdate(update);
+    else tui.finishUpdateCheck();
+  }).catch(() => {
+    if (!quitting) tui.finishUpdateCheck();
+  });
 
   async function launch(settings: RunwireSettings): Promise<void> {
     validateLaunchSettings(settings, tunnelApiKeyFile);
