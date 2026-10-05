@@ -40,11 +40,14 @@ export function isSidebandBlockedTool(tool: ToolMetadata): boolean {
 }
 
 export function wrapExecCode(code: string): string {
+  const pragmaMatch = code.match(/^([ \t]*\/\/ @exec:[^\r\n]*)\r?\n/);
+  const pragma = pragmaMatch ? `${pragmaMatch[1]}\n` : "";
+  if (pragmaMatch) code = code.slice(pragmaMatch[0].length);
   const namePattern = JSON.stringify(MODEL_TOOL_NAME_PATTERN.source);
   const descriptionPattern = JSON.stringify(MODEL_TOOL_DESCRIPTION_PATTERN.source);
   const testHarnessPattern = JSON.stringify(TEST_HARNESS_TOOL_NAME_PATTERN.source);
 
-  return `{
+  return `${pragma}{
   const __sidebandNamePattern = new RegExp(${namePattern}, "i");
   const __sidebandDescriptionPattern = new RegExp(${descriptionPattern}, "i");
   const __sidebandTestHarnessPattern = new RegExp(${testHarnessPattern}, "i");

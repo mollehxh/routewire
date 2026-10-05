@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { CodexTurnBridge } from "../bridge.js";
 import {
-  isLunaRequest,
-  proxyLunaRequest,
+  isAllowedChildRequest,
+  proxyChildRequest,
   type LunaProxyOptions,
 } from "./luna.js";
 import { isRecord } from "./protocol.js";
@@ -42,17 +42,14 @@ export async function handleProviderHttpRequest(
     );
   }
 
-  if (isRecord(body) && body.model === bridge.model) {
-    const threadId = singleHeader(req.headers["thread-id"]);
-    if (threadId && !rootThreadIds.has(bridge)) rootThreadIds.set(bridge, threadId);
-  }
-
-  if (isLunaRequest(body)) {
+  const parentThreadId = singleHeader(req.headers["x-codex-parent-thread-id"]);
+  const allowedChildModels = lunaOptions.allowedModels ?? ["gpt-6-luna"];
+  if (parentThreadId && isAllowedChildRequest(body, allowedChildModels)) {
     try {
       const rootThreadId = rootThreadIds.get(bridge);
-      const parentThreadId = singleHeader(req.headers["x-codex-parent-thread-id"]);
-      await proxyLunaRequest(req, res, body, {
+      await proxyChildRequest(req, res, body, {
         ...lunaOptions,
+        allowedModels: allowedChildModels,
         syntheticRootChild:
           lunaOptions.syntheticRootChild ?? Boolean(rootThreadId && parentThreadId === rootThreadId),
       });
@@ -62,6 +59,11 @@ export async function handleProviderHttpRequest(
       sendFailedStream(res, "sideband_luna_proxy_error", message);
     }
     return true;
+  }
+
+  if (isRecord(body) && body.model === bridge.model) {
+    const threadId = singleHeader(req.headers["thread-id"]);
+    if (threadId && !rootThreadIds.has(bridge)) rootThreadIds.set(bridge, threadId);
   }
 
   if (isRecord(body) && body.model !== bridge.model) {

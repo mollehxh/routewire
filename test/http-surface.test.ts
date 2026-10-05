@@ -1,3 +1,9 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createConnection } from "node:net";
+import type { McpServer } from "@modelcontextprotocol/server";
+
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -47,6 +53,42 @@ function initialRequest() {
 }
 
 describe("SidebandHttpSurface", () => {
+  it("releases the HTTP listener even when MCP cleanup fails", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    bridge.acceptModelRequest(initialRequest(), () => undefined);
+    const surface = new SidebandHttpSurface({ bridge });
+    await surface.start();
+    const origin = surface.origin;
+    const failure = new Error("transport cleanup failed");
+    const close = vi.fn().mockRejectedValue(failure);
+    surface.setMcpServer({ close } as unknown as McpServer, await bridge.ready());
+    await expect(surface.close()).rejects.toBe(failure);
+    await expect(fetch(origin)).rejects.toThrow();
+    await expect(surface.close()).rejects.toBe(failure);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds shutdown when a client leaves its request body incomplete", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    const surface = new SidebandHttpSurface({ bridge });
+    await surface.start();
+    const origin = surface.origin;
+    const socket = createConnection(Number(new URL(origin).port), "127.0.0.1");
+    socket.on("error", () => undefined);
+    closers.push(async () => { socket.destroy(); await surface.close(); });
+    await new Promise<void>(resolve => socket.once("connect", resolve));
+    socket.write("POST /v1/responses HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{");
+    // Ensure Node has accepted this request before starting shutdown.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const closed = new Promise<void>(resolve => socket.once("close", () => resolve()));
+    await expect(Promise.race([
+      surface.close().then(() => "closed"),
+      new Promise(resolve => setTimeout(() => resolve("timed out"), 1500)),
+    ])).resolves.toBe("closed");
+    await closed;
+    await expect(fetch(origin)).rejects.toThrow();
+  });
+
   it("rejects non-loopback binds", () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
     expect(() => new SidebandHttpSurface({ bridge, host: "0.0.0.0" })).toThrow(/loopback/i);
@@ -133,10 +175,16 @@ describe("SidebandHttpSurface", () => {
     const projectedTools = selectProjectedNativeTools([
       { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
     ]);
-    const nativeSkillTools = {
-      listName: "mcp__codex_apps__fkn_codex_codex_skills_list",
-      getName: "mcp__codex_apps__fkn_codex_codex_skill_get",
-    };
+    const root = await mkdtemp(join(tmpdir(), "sideband-http-skills-"));
+    const skillRoot = join(root, "skills");
+    const skillDir = join(skillRoot, "alpha");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      "---\nname: alpha\ndescription: A\n---\n\nbody\n",
+      "utf8",
+    );
+    const nativeSkillTools = { kind: "local" as const, roots: [skillRoot] };
 
     const surface = new SidebandHttpSurface({ bridge });
     await surface.start();
@@ -242,7 +290,7 @@ describe("SidebandHttpSurface", () => {
       },
     });
 
-    const bootstrapCallResponse = fetch(surface.mcpUrl, {
+    const bootstrapCallResponse = await fetch(surface.mcpUrl, {
       method: "POST",
       headers: modernHeaders("tools/call", "bootstrap"),
       body: JSON.stringify({
@@ -257,35 +305,8 @@ describe("SidebandHttpSurface", () => {
       }),
     });
 
-    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
-    const bootstrapReply = providerReply as ProviderReply | undefined;
-    if (!bootstrapReply || bootstrapReply.kind !== "tool_call") {
-      throw new Error("missing bootstrap skill-catalog call");
-    }
-    expect(bootstrapReply.input).toContain(nativeSkillTools.listName);
-    bridge.acceptModelRequest(
-      {
-        ...initialRequest(),
-        input: [
-          ...initialRequest().input,
-          {
-            type: "custom_tool_call_output",
-            call_id: bootstrapReply.callId,
-            output: [{
-              type: "input_text",
-              text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":1,"skills":[{"name":"alpha","description":"A"}]}__SIDEBAND_SKILL_PAYLOAD_END__',
-            }],
-          },
-        ],
-      },
-      reply => {
-        providerReply = reply;
-      },
-    );
-
-    const bootstrapCall = await bootstrapCallResponse;
-    expect(bootstrapCall.status).toBe(200);
-    const bootstrapPayload = await bootstrapCall.json() as any;
+    expect(bootstrapCallResponse.status).toBe(200);
+    const bootstrapPayload = await bootstrapCallResponse.json() as any;
     const bootstrapText = bootstrapPayload.result.content[0].text as string;
     expect(JSON.parse(bootstrapText)).toMatchObject({
       model: "gpt-5.6-sol",
@@ -296,9 +317,8 @@ describe("SidebandHttpSurface", () => {
       skills_available: true,
       skills: [{ name: "alpha", description: "A" }],
     });
-    providerReply = undefined;
 
-    const skillsCallResponse = fetch(surface.mcpUrl, {
+    const skillsCallResponse = await fetch(surface.mcpUrl, {
       method: "POST",
       headers: modernHeaders("tools/call", "skills"),
       body: JSON.stringify({
@@ -313,33 +333,8 @@ describe("SidebandHttpSurface", () => {
       }),
     });
 
-    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
-    const skillsReply = providerReply as ProviderReply | undefined;
-    if (!skillsReply || skillsReply.kind !== "tool_call") throw new Error("missing skills call");
-    expect(skillsReply.input).toContain(nativeSkillTools.listName);
-    bridge.acceptModelRequest(
-      {
-        ...initialRequest(),
-        input: [
-          ...initialRequest().input,
-          {
-            type: "custom_tool_call_output",
-            call_id: skillsReply.callId,
-            output: [{
-              type: "input_text",
-              text: '__SIDEBAND_SKILL_PAYLOAD_START__{"total":1,"skills":[{"name":"alpha","description":"A"}]}__SIDEBAND_SKILL_PAYLOAD_END__',
-            }],
-          },
-        ],
-      },
-      reply => {
-        providerReply = reply;
-      },
-    );
-
-    const skillsCall = await skillsCallResponse;
-    expect(skillsCall.status).toBe(200);
-    await expect(skillsCall.json()).resolves.toMatchObject({
+    expect(skillsCallResponse.status).toBe(200);
+    await expect(skillsCallResponse.json()).resolves.toMatchObject({
       jsonrpc: "2.0",
       id: "skills-call-1",
       result: {
@@ -449,5 +444,78 @@ describe("SidebandHttpSurface", () => {
         isError: false,
       },
     });
+  });
+
+  it("drains a native reply after modern MCP cancellation and then accepts another call", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    let providerReply: ProviderReply | undefined;
+    bridge.acceptModelRequest(initialRequest(), reply => {
+      providerReply = reply;
+    });
+    const execSpec = await bridge.ready();
+    const projectedTools = selectProjectedNativeTools([
+      { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
+    ]);
+
+    const surface = new SidebandHttpSurface({ bridge });
+    await surface.start();
+    surface.setMcpServer(
+      createSidebandMcpServer({ bridge, execSpec, projectedTools }),
+      execSpec,
+      projectedTools,
+    );
+    closers.push(async () => {
+      bridge.close("test complete");
+      await surface.close();
+    });
+
+    const controller = new AbortController();
+    const request = fetch(surface.mcpUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "MCP-Protocol-Version": "2026-07-28",
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "exec_command",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "cancel-call-1",
+        method: "tools/call",
+        params: {
+          name: "exec_command",
+          arguments: { cmd: "printf CANCEL_MODERN" },
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": { name: "sideband-test", version: "1" },
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    await vi.waitFor(() => expect(providerReply?.kind).toBe("tool_call"));
+    controller.abort();
+    await request.catch(() => undefined);
+
+    await vi.waitFor(async () => {
+      await expect(bridge.invokeExec("text('probe-after-cancel');")).rejects.toThrow(
+        /already active/i,
+      );
+    });
+    const first = providerReply;
+    if (!first || first.kind !== "tool_call") throw new Error("expected first call");
+    bridge.acceptModelRequest({...initialRequest(), input: [...initialRequest().input, {
+      type:"custom_tool_call_output",call_id:first.callId,output:[{type:"input_text",text:"late native completion"}],
+    }]}, reply => {providerReply=reply;});
+    const next=bridge.invokeExec("text('after cancellation');");
+    const second=providerReply;
+    if (!second || second.kind !== "tool_call") throw new Error("expected next call");
+    bridge.acceptModelRequest({...initialRequest(), input:[...initialRequest().input,{
+      type:"custom_tool_call_output",call_id:second.callId,output:[{type:"input_text",text:"recovered"}],
+    }]},()=>undefined);
+    await expect(next).resolves.toMatchObject({content:[{type:"text",text:"recovered"}]});
   });
 });

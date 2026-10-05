@@ -9,6 +9,11 @@ import {
 } from "../src/tool-policy.js";
 
 describe("Sideband tool policy", () => {
+  it("preserves the initial exec pragma before the policy block", () => {
+    const pragma = '// @exec: {"yield_time_ms": 120000, "max_output_tokens": 1234}';
+    expect(wrapExecCode(`${pragma}\r\ntext('ok');`).split('\n')[0]).toBe(pragma);
+    expect(wrapExecCode(`${pragma}\ntext('ok');`)).toContain("Blocked model-spawning tool");
+  });
   it("blocks tools that start or continue independent model/agent sessions", () => {
     for (const tool of [
       { name: "mcp__x__collaboration__spawn_agent", description: "Spawn an agent." },
@@ -24,7 +29,7 @@ describe("Sideband tool policy", () => {
     for (const tool of [
       { name: "exec_command", description: "Run a shell command." },
       { name: "mcp__node_repl__js", description: "Browser Use JavaScript runtime." },
-      { name: "mcp__codex_apps__fkn_codex_mcp__cua_repl__js", description: "Computer Use runtime." },
+      { name: "mcp__codex_apps__desktop_runtime_mcp__cua_repl__js", description: "Computer Use runtime." },
       { name: "mcp__gmail__search", description: "Search mail." },
     ]) {
       expect(isModelSpawningTool(tool)).toBe(false);

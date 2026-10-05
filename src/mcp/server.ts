@@ -1,13 +1,13 @@
-import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
+import { McpServer, type CallToolResult, type Tool, type ServerContext } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
-import type { CodexTurnBridge } from "../bridge.js";
-import { cleanCodeModeResult, type ExecToolSpec } from "../provider/protocol.js";
+import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
+import { type ExecToolSpec } from "../provider/protocol.js";
 import {
-  compactExecDescription,
-  SIDEBAND_EXEC_GUIDANCE,
   wrapExecCode,
 } from "../tool-policy.js";
+import {execToolDefinition} from "./exec-tool.js";
+import {invokeExecAndWait} from "./code-mode.js";
 import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import {
   invokeCollaborationTool,
@@ -16,6 +16,7 @@ import {
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
+  projectedToolsFingerprint,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
 import {
@@ -30,6 +31,8 @@ export interface CreateSidebandMcpServerOptions {
   projectedTools?: ProjectedNativeTool[];
   nativeSkillTools?: NativeSkillTools;
   collaborationTools?: CollaborationTool[];
+  onEvent?: (event: CodexBridgeEvent) => void;
+  refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
 }
 
 export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions): McpServer {
@@ -58,23 +61,33 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
     },
   );
 
-  for (const tool of options.projectedTools ?? []) {
-    server.registerTool(
-      tool.name,
-      {
-        title: tool.title,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-      },
-      async (arguments_: unknown): Promise<CallToolResult> => {
-        const result = await invokeProjectedNativeTool(options.bridge, tool, arguments_);
-        return {
-          content: result.content,
-          isError: result.isError,
-        };
-      },
-    );
-  }
+  const projected = new Map<string, ReturnType<McpServer["registerTool"]>>();
+  let projectedSnapshot = "";
+  const updateProjected = (tools: ProjectedNativeTool[]) => {
+    const snapshot = projectedToolsFingerprint(tools);
+    if (snapshot === projectedSnapshot) return;
+    projectedSnapshot = snapshot;
+    for (const [name, registration] of projected) {
+      if (!tools.some(tool => tool.name === name)) {
+        registration.remove();
+        projected.delete(name);
+      }
+    }
+    for (const tool of tools) {
+      const handler = async (arguments_: unknown, context: ServerContext): Promise<CallToolResult> => {
+        const result = await invokeProjectedNativeTool(options.bridge, tool, arguments_, {signal: context.mcpReq.signal});
+        return {content: result.content, isError: result.isError};
+      };
+      const registration = projected.get(tool.name);
+      if (registration) registration.update({description:tool.description,paramsSchema:tool.inputSchema,callback:handler});
+      else projected.set(tool.name, server.registerTool(tool.name, {
+        title: tool.title, description:tool.description,inputSchema:tool.inputSchema,
+      },handler));
+    }
+    options.projectedTools = tools;
+  };
+  projectedUpdaters.set(server, updateProjected);
+  updateProjected(options.projectedTools ?? []);
 
   for (const tool of options.collaborationTools ?? []) {
     server.registerTool(
@@ -84,9 +97,9 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
         description: tool.description,
         inputSchema: tool.inputSchema,
       },
-      async (arguments_: unknown): Promise<CallToolResult> => {
+      async (arguments_: unknown, context): Promise<CallToolResult> => {
         try {
-          const result = await invokeCollaborationTool(options.bridge, tool, arguments_);
+          const result = await invokeCollaborationTool(options.bridge, tool, arguments_, {signal: context.mcpReq.signal});
           return { content: result.content, isError: result.isError };
         } catch (error) {
           return {
@@ -114,6 +127,7 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
               options.nativeSkillTools!,
               definition.name,
               arguments_,
+              { onEvent: options.onEvent },
             );
             return { content: result.content, isError: result.isError };
           } catch (error) {
@@ -129,20 +143,9 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
 
   server.registerTool(
     "exec",
-    {
-      title: "Codex exec",
-      description: `${compactExecDescription(options.execSpec.description)}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
-      inputSchema: z.object({
-        code: z
-          .string()
-          .min(1)
-          .describe(
-            "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences.",
-          ),
-      }),
-    },
-    async ({ code }): Promise<CallToolResult> => {
-      const result = cleanCodeModeResult(await options.bridge.invokeExec(wrapExecCode(code)));
+    execToolDefinition(options.execSpec),
+    async ({ code }, context): Promise<CallToolResult> => {
+      const result = await invokeExecAndWait(options.bridge, wrapExecCode(code), {signal: context.mcpReq.signal});
       return {
         content: result.content,
         isError: result.isError,
@@ -150,9 +153,33 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
     },
   );
 
+  if (options.refreshProjectedTools) {
+    server.server.setRequestHandler("tools/list", async () => {
+      updateProjected(await options.refreshProjectedTools!());
+      return {tools: listSidebandTools(options)};
+    });
+  }
   return server;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const projectedUpdaters = new WeakMap<McpServer, (tools: ProjectedNativeTool[]) => void>();
+export function updateSidebandProjectedTools(server: McpServer, tools: ProjectedNativeTool[]): void {
+  projectedUpdaters.get(server)?.(tools);
+}
+
+function listSidebandTools(options: CreateSidebandMcpServerOptions): Tool[] {
+  const definitions = [
+    SIDEBAND_BOOTSTRAP_TOOL,
+    ...(options.projectedTools ?? []),
+    ...(options.collaborationTools ?? []),
+    ...(options.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS : []),
+    execToolDefinition(options.execSpec),
+  ];
+  return definitions.map(({name,title,description,inputSchema}) => ({
+    name,title,description,inputSchema:z.toJSONSchema(inputSchema) as Tool["inputSchema"],
+  }));
 }

@@ -1,11 +1,13 @@
 import { z, type ZodType } from "zod";
 
-import type { CodexTurnBridge } from "../bridge.js";
+import type { BridgeCallOptions, CodexTurnBridge } from "../bridge.js";
 import {
   cleanCodeModeResult,
   type BridgeCallResult,
 } from "../provider/protocol.js";
 import { wrapExecCode } from "../tool-policy.js";
+import {invokeExecAndWait} from "./code-mode.js";
+import {invokeQueuedFunction} from "./bridge-scheduler.js";
 
 export interface NativeToolMetadata {
   name: string;
@@ -16,6 +18,7 @@ export interface ProjectedNativeTool {
   name: string;
   title: string;
   nativeName: string;
+  nativeNamespace?: string;
   description: string;
   inputSchema: ZodType;
   mapArguments(arguments_: unknown): unknown;
@@ -58,6 +61,12 @@ const replSchema = z.object({
 
 const addNodeModuleDirSchema = z.object({ path: z.string().min(1) });
 const emptySchema = z.object({});
+const waitSchema = z.object({
+  cell_id: z.string().min(1),
+  max_tokens: z.number().int().positive().optional(),
+  terminate: z.boolean().optional(),
+  yield_time_ms: z.number().int().nonnegative().optional(),
+});
 
 interface ProjectionDefinition {
   name: string;
@@ -160,9 +169,8 @@ function chooseNativeBySuffix(
 
 function nativePreference(name: string): number {
   if (/^mcp__cua_repl__/i.test(name)) return 0;
-  if (/__fkn_codex_mcp__/i.test(name)) return 1;
-  if (!/__codex_apps__/i.test(name)) return 2;
-  return 3;
+  if (!/__codex_apps__/i.test(name)) return 1;
+  return 2;
 }
 
 export function selectProjectedNativeTools(
@@ -206,6 +214,12 @@ export async function discoverProjectedNativeTools(
     projected = selectProjectedNativeTools(inventory);
   }
 
+  const wait = bridge.functionTools().find(tool => tool.name === "wait");
+  if (wait) projected.push({
+    name: "wait", title: "Wait for Codex Code Mode cell", nativeName: "wait", nativeNamespace: "functions",
+    description: wait.description, inputSchema: waitSchema,
+    mapArguments: arguments_ => waitSchema.parse(arguments_),
+  });
   return projected;
 }
 
@@ -233,7 +247,7 @@ const __sidebandInventory = ALL_TOOLS
 }));
 text(${JSON.stringify(INVENTORY_START)} + JSON.stringify(__sidebandInventory) + ${JSON.stringify(INVENTORY_END)});
 `;
-  const result = await bridge.invokeExec(wrapExecCode(code));
+  const result = await invokeExecAndWait(bridge, wrapExecCode(code));
   return parseInventory(result);
 }
 
@@ -279,8 +293,12 @@ export async function invokeProjectedNativeTool(
   bridge: CodexTurnBridge,
   tool: ProjectedNativeTool,
   arguments_: unknown,
+  options: BridgeCallOptions = {},
 ): Promise<BridgeCallResult> {
   const nativeArguments = tool.mapArguments(arguments_);
+  if (tool.nativeNamespace) {
+    return invokeQueuedFunction(bridge, tool.nativeNamespace, tool.nativeName, nativeArguments as Record<string, unknown>, options);
+  }
   const invocation = `tools[${JSON.stringify(tool.nativeName)}](${JSON.stringify(nativeArguments)})`;
 
   const code = `
@@ -313,7 +331,7 @@ if (
 }
 `;
   return cleanProjectedNativeResult(
-    await bridge.invokeExec(wrapExecCode(code)),
+    await invokeExecAndWait(bridge, wrapExecCode(code), options),
     tool,
   );
 }
@@ -368,4 +386,10 @@ export function projectedToolJsonSchema(tool: ProjectedNativeTool): Record<strin
   const schema = z.toJSONSchema(tool.inputSchema) as Record<string, unknown>;
   const { $schema: _schema, ...withoutDialect } = schema;
   return withoutDialect;
+}
+
+export function projectedToolsFingerprint(tools: readonly ProjectedNativeTool[]): string {
+  return JSON.stringify(tools.map(tool => [
+    tool.name, tool.nativeName, tool.nativeNamespace, tool.description, projectedToolJsonSchema(tool),
+  ]));
 }

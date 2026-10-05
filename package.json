@@ -22,6 +22,8 @@
     "@modelcontextprotocol/server": "^2.2.0",
     "adm-zip": "^0.6.1",
     "cross-spawn": "^7.0.6",
+    "ink": "7.1.1",
+    "react": "^19.3.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {
@@ -29,11 +31,13 @@
     "@types/adm-zip": "^0.5.8",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "ink-testing-library": "^4.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

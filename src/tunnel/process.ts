@@ -27,11 +27,15 @@ export interface StartTunnelClientOptions {
   env?: NodeJS.ProcessEnv;
   readyTimeoutMs?: number;
   quiet?: boolean;
+  healthCheckIntervalMs?: number;
+  healthFailureThreshold?: number;
+  maxControlPlanePollAgeSeconds?: number;
 }
 
 export interface TunnelClientHandle {
   readonly healthUrl: string;
   readonly exited: Promise<TunnelClientExit>;
+  readonly unhealthy: Promise<Error>;
   close(): Promise<void>;
 }
 
@@ -69,10 +73,16 @@ export async function startTunnelClient(
       detached: shouldCreateProcessGroup(),
     });
 
-    if (!options.quiet) {
-      child.stdout?.on("data", chunk => process.stdout.write(`[tunnel stdout] ${String(chunk)}`));
-      child.stderr?.on("data", chunk => process.stderr.write(`[tunnel stderr] ${String(chunk)}`));
-    }
+    // Always drain both pipes. A quiet child that keeps writing logs will eventually
+    // block once the OS pipe buffer fills if nobody reads from stdout/stderr. That
+    // can leave tunnel-client alive and locally ready while it stops polling the
+    // control plane. `quiet` controls presentation only, never consumption.
+    child.stdout?.on("data", chunk => {
+      if (!options.quiet) process.stdout.write(`[tunnel stdout] ${String(chunk)}`);
+    });
+    child.stderr?.on("data", chunk => {
+      if (!options.quiet) process.stderr.write(`[tunnel stderr] ${String(chunk)}`);
+    });
 
     const exited = observeExit(child);
     const healthUrl = await waitForReady({
@@ -81,14 +91,22 @@ export async function startTunnelClient(
       healthUrlFile,
       timeoutMs: options.readyTimeoutMs ?? 30_000,
     });
+    const healthMonitor = startHealthMonitor({
+      healthUrl,
+      intervalMs: options.healthCheckIntervalMs ?? 15_000,
+      failureThreshold: options.healthFailureThreshold ?? 3,
+      maxControlPlanePollAgeSeconds: options.maxControlPlanePollAgeSeconds ?? 90,
+    });
 
     let closed = false;
     return {
       healthUrl,
       exited,
+      unhealthy: healthMonitor.failed,
       async close() {
         if (closed) return;
         closed = true;
+        healthMonitor.stop();
         terminateProcessTree(child!);
         const exitedGracefully = await waitForExit(exited, 2_000);
         if (!exitedGracefully) {
@@ -103,6 +121,85 @@ export async function startTunnelClient(
     await fs.rm(stateDir, { recursive: true, force: true });
     throw error;
   }
+}
+
+function startHealthMonitor(options: {
+  healthUrl: string;
+  intervalMs: number;
+  failureThreshold: number;
+  maxControlPlanePollAgeSeconds: number;
+}): { failed: Promise<Error>; stop(): void } {
+  let stopped = false;
+  let checking = false;
+  let consecutiveFailures = 0;
+  let resolveFailure!: (error: Error) => void;
+  const failed = new Promise<Error>(resolve => {
+    resolveFailure = resolve;
+  });
+
+  const check = async () => {
+    if (stopped || checking) return;
+    checking = true;
+    try {
+      const health = await readTunnelHealth(options.healthUrl);
+      const healthy =
+        health.ready === true &&
+        (health.controlPlanePollAgeSeconds === undefined ||
+          health.controlPlanePollAgeSeconds <= options.maxControlPlanePollAgeSeconds);
+      consecutiveFailures = healthy ? 0 : consecutiveFailures + 1;
+      if (!healthy && consecutiveFailures >= options.failureThreshold) {
+        stopped = true;
+        clearInterval(timer);
+        const detail = health.controlPlanePollAgeSeconds === undefined
+          ? "health endpoint is not ready"
+          : `control-plane poll age is ${Math.round(health.controlPlanePollAgeSeconds)}s`;
+        resolveFailure(new Error(`OpenAI tunnel-client became unhealthy: ${detail}`));
+      }
+    } catch (error) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures >= options.failureThreshold) {
+        stopped = true;
+        clearInterval(timer);
+        const detail = error instanceof Error ? error.message : String(error);
+        resolveFailure(new Error(`OpenAI tunnel-client health checks failed: ${detail}`, { cause: error }));
+      }
+    } finally {
+      checking = false;
+    }
+  };
+
+  const timer = setInterval(() => void check(), Math.max(100, options.intervalMs));
+  timer.unref();
+  return {
+    failed,
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+    },
+  };
+}
+
+async function readTunnelHealth(healthUrl: string): Promise<{
+  ready: boolean;
+  controlPlanePollAgeSeconds?: number;
+}> {
+  const response = await fetch(`${healthUrl}/health?details=true`, {
+    signal: AbortSignal.timeout(1_000),
+  });
+  if (!response.ok) return { ready: false };
+  const body = await response.json() as unknown;
+  if (!isRecord(body)) return { ready: false };
+  const components = isRecord(body.components) ? body.components : undefined;
+  const controlPlane = components && isRecord(components["control-plane"])
+    ? components["control-plane"]
+    : undefined;
+  const details = controlPlane && isRecord(controlPlane.details) ? controlPlane.details : undefined;
+  const pollAge = details?.current_poll_age_seconds;
+  return {
+    ready: body.ready === true,
+    controlPlanePollAgeSeconds: typeof pollAge === "number" && Number.isFinite(pollAge) ? pollAge : undefined,
+  };
 }
 
 function observeExit(child: ChildProcess): Promise<TunnelClientExit> {
@@ -205,6 +302,10 @@ function earlyExitError(exit: TunnelClientExit): Error {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function delay(ms: number): Promise<void> {

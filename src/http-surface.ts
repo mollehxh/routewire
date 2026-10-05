@@ -7,24 +7,31 @@ import {
 } from "@modelcontextprotocol/node";
 import type { McpServer } from "@modelcontextprotocol/server";
 
-import type { CodexTurnBridge } from "./bridge.js";
+import type { CodexBridgeEvent, CodexTurnBridge } from "./bridge.js";
 import type { CollaborationTool } from "./mcp/collaboration-tools.js";
 import { handleModernMcpRequest } from "./mcp/modern.js";
 import type { ProjectedNativeTool } from "./mcp/projected-tools.js";
 import type { NativeSkillTools } from "./mcp/skill-tools.js";
 import { handleProviderHttpRequest } from "./provider/http.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
+import type { ReasoningEffort } from "./model-catalog.js";
 
 export interface SidebandHttpSurfaceOptions {
   bridge: CodexTurnBridge;
   host?: string;
   port?: number;
+  allowedSubagentModels?: readonly string[];
+  subagentModelEfforts?: Readonly<Record<string, readonly ReasoningEffort[]>>;
+  onEvent?: (event: CodexBridgeEvent) => void;
 }
 
 export class SidebandHttpSurface {
   readonly #bridge: CodexTurnBridge;
   readonly #host: string;
   readonly #requestedPort: number;
+  readonly #allowedSubagentModels: readonly string[];
+  readonly #subagentModelEfforts?: Readonly<Record<string, readonly ReasoningEffort[]>>;
+  readonly #onEvent?: (event: CodexBridgeEvent) => void;
   #server?: Server;
   #mcpServer?: McpServer;
   #execSpec?: ExecToolSpec;
@@ -32,6 +39,8 @@ export class SidebandHttpSurface {
   #nativeSkillTools?: NativeSkillTools;
   #collaborationTools: CollaborationTool[] = [];
   #port?: number;
+  #refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
+  #closePromise?: Promise<void>;
 
   constructor(options: SidebandHttpSurfaceOptions) {
     this.#bridge = options.bridge;
@@ -40,6 +49,9 @@ export class SidebandHttpSurface {
       throw new Error(`Sideband only binds loopback addresses; received host ${this.#host}`);
     }
     this.#requestedPort = options.port ?? 0;
+    this.#allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
+    this.#subagentModelEfforts = options.subagentModelEfforts;
+    this.#onEvent = options.onEvent;
   }
 
   get providerBaseUrl(): string {
@@ -61,16 +73,26 @@ export class SidebandHttpSurface {
     projectedTools: ProjectedNativeTool[] = [],
     nativeSkillTools?: NativeSkillTools,
     collaborationTools: CollaborationTool[] = [],
+    refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>,
   ): void {
     this.#mcpServer = server;
     this.#execSpec = execSpec;
     this.#projectedTools = projectedTools;
     this.#nativeSkillTools = nativeSkillTools;
     this.#collaborationTools = collaborationTools;
+    this.#refreshProjectedTools = refreshProjectedTools;
+  }
+
+  updateProjectedTools(tools: ProjectedNativeTool[]): void {
+    this.#projectedTools = tools;
   }
 
   async start(): Promise<void> {
     if (this.#server) throw new Error("Sideband HTTP surface is already started");
+    if (this.#closePromise) {
+      await this.#closePromise.catch(() => undefined);
+      this.#closePromise = undefined;
+    }
 
     const validateHost = localhostHostValidation();
     const validateOrigin = localhostOriginValidation();
@@ -78,7 +100,10 @@ export class SidebandHttpSurface {
     const server = createServer(async (req, res) => {
       try {
         if (!validateHost(req, res) || !validateOrigin(req, res)) return;
-        if (await handleProviderHttpRequest(req, res, this.#bridge)) return;
+        if (await handleProviderHttpRequest(req, res, this.#bridge, {
+          allowedModels: this.#allowedSubagentModels,
+          modelEfforts: this.#subagentModelEfforts,
+        })) return;
 
         const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
         if (url.pathname !== "/mcp") {
@@ -100,6 +125,8 @@ export class SidebandHttpSurface {
             projectedTools: this.#projectedTools,
             nativeSkillTools: this.#nativeSkillTools,
             collaborationTools: this.#collaborationTools,
+            onEvent: this.#onEvent,
+            refreshProjectedTools: this.#refreshProjectedTools,
           })
         ) {
           return;
@@ -146,23 +173,37 @@ export class SidebandHttpSurface {
   }
 
   async close(): Promise<void> {
+    if (this.#closePromise) return this.#closePromise;
     const mcpServer = this.#mcpServer;
     this.#mcpServer = undefined;
     this.#execSpec = undefined;
     this.#projectedTools = [];
     this.#nativeSkillTools = undefined;
     this.#collaborationTools = [];
-    if (mcpServer) await mcpServer.close();
+    this.#refreshProjectedTools = undefined;
 
     const server = this.#server;
     this.#server = undefined;
     this.#port = undefined;
-    if (!server) return;
+    const closeHttp = server ? new Promise<void>(resolve => {
+      // Stop accepting connections immediately, then bound incomplete requests.
+      const grace = setTimeout(() => server.closeAllConnections(), 250);
+      grace.unref();
+      server.close(() => {
+        clearTimeout(grace);
+        resolve();
+      });
+      server.closeIdleConnections();
+    }) : Promise.resolve();
 
-    await new Promise<void>(resolve => {
-      server.close(() => resolve());
-      server.closeIdleConnections?.();
+    this.#closePromise = Promise.allSettled([
+      closeHttp,
+      Promise.resolve().then(() => mcpServer?.close()),
+    ]).then(results => {
+      const failure = results.find(result => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
     });
+    return this.#closePromise;
   }
 }
 

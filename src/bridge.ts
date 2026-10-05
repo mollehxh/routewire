@@ -20,7 +20,37 @@ import {
 
 export interface CodexTurnBridgeOptions {
   model: string;
+  onEvent?: (event: CodexBridgeEvent) => void;
 }
+
+export interface BridgeCallOptions {
+  signal?: AbortSignal;
+}
+
+export type CodexBridgeEvent =
+  | {
+      type: "call_started";
+      callId: string;
+      namespace: string;
+      name: string;
+      input?: string;
+      arguments?: Record<string, unknown>;
+      startedAt: number;
+    }
+  | {
+      type: "call_finished";
+      callId: string;
+      namespace: string;
+      name: string;
+      isError: boolean;
+      durationMs: number;
+      output?: string;
+    }
+  | {
+      type: "agent_message";
+      id?: string;
+      text: string;
+    };
 
 type ProviderResponder = (reply: ProviderReply) => void;
 
@@ -28,14 +58,21 @@ interface ActiveCall {
   callId: string;
   requestFingerprint: string;
   providerReply: Extract<ProviderReply, { kind: "tool_call" }>;
+  namespace: string;
+  name: string;
+  startedAt: number;
+  abortCleanup?: () => void;
+  cancelled?: boolean;
   resolve: (result: BridgeCallResult) => void;
   reject: (error: Error) => void;
 }
 
 export class CodexTurnBridge {
   readonly #model: string;
+  readonly #onEvent?: (event: CodexBridgeEvent) => void;
   #execSpec?: ExecToolSpec;
   #collaborationTools: FunctionToolSpec[] = [];
+  #functionTools: FunctionToolSpec[] = [];
   #readyPromise: Promise<ExecToolSpec>;
   #resolveReady!: (spec: ExecToolSpec) => void;
   #rejectReady!: (error: Error) => void;
@@ -49,6 +86,7 @@ export class CodexTurnBridge {
 
   constructor(options: CodexTurnBridgeOptions) {
     this.#model = options.model;
+    this.#onEvent = options.onEvent;
     this.#readyPromise = new Promise<ExecToolSpec>((resolve, reject) => {
       this.#resolveReady = resolve;
       this.#rejectReady = reject;
@@ -64,6 +102,7 @@ export class CodexTurnBridge {
   }
 
   operationalContext(): CodexOperationalContext {
+    if (this.#closed) throw new Error("Sideband bridge is closed");
     if (!this.#operationalContext) {
       throw new Error("Codex operational context is not available yet");
     }
@@ -72,6 +111,18 @@ export class CodexTurnBridge {
 
   collaborationTools(): FunctionToolSpec[] {
     return structuredClone(this.#collaborationTools);
+  }
+
+  functionTools(): FunctionToolSpec[] {
+    return structuredClone(this.#functionTools);
+  }
+
+  hasFunctionTool(name: string): boolean {
+    return this.#functionTools.some(tool => tool.name === name);
+  }
+
+  get idle(): boolean {
+    return !this.#closed && !this.#activeCall && Boolean(this.#pendingModelReply);
   }
 
   acceptModelRequest(body: unknown, respond: ProviderResponder): void {
@@ -84,6 +135,8 @@ export class CodexTurnBridge {
     }
 
     const spec = extractExecToolSpec(body);
+    const functionTools = extractFunctionToolSpecs(body, "functions");
+    if (functionTools.length > 0) this.#functionTools = functionTools;
     const collaborationTools = extractFunctionToolSpecs(body, "collaboration");
     if (collaborationTools.length > 0) this.#collaborationTools = collaborationTools;
     if (spec && !this.#execSpec) {
@@ -142,25 +195,40 @@ export class CodexTurnBridge {
 
       const activeCall = this.#activeCall;
       this.#activeCall = undefined;
+      activeCall.abortCleanup?.();
       const result = bridgeResultFromCodexOutput(output);
-      result.content.push(
-        ...extractAgentMessages(body).flatMap(message => {
+      if (!activeCall.cancelled) {
+        for (const message of extractAgentMessages(body)) {
           const key = message.id ?? `text:${message.text}`;
-          if (this.#seenAgentMessages.has(key)) return [];
+          if (this.#seenAgentMessages.has(key)) continue;
           this.#seenAgentMessages.add(key);
-          return [{ type: "text" as const, text: message.text }];
-        }),
-      );
-      activeCall.resolve(result);
+          this.#emit({ type: "agent_message", id: message.id, text: message.text });
+          result.content.push({ type: "text" as const, text: message.text });
+        }
+        this.#emit({
+          type: "call_finished",
+          callId: activeCall.callId,
+          namespace: activeCall.namespace,
+          name: activeCall.name,
+          isError: result.isError,
+          durationMs: Date.now() - activeCall.startedAt,
+          output: result.content
+            .flatMap(item => (item.type === "text" ? [item.text] : []))
+            .join("\n")
+            .slice(0, 8_000),
+        });
+        activeCall.resolve(result);
+      }
     }
 
     this.#pendingModelReply = respond;
     this.#pendingModelRequestFingerprint = requestFingerprint;
   }
 
-  invokeExec(code: string): Promise<BridgeCallResult> {
+  invokeExec(code: string, options: BridgeCallOptions = {}): Promise<BridgeCallResult> {
     if (this.#closed) return Promise.reject(new Error("Sideband bridge is closed"));
     if (!this.#execSpec) return Promise.reject(new Error("Codex tool surface is not ready yet"));
+    if (options.signal?.aborted) return Promise.reject(callCancellationError(options.signal.reason));
     if (this.#activeCall) return Promise.reject(new Error("A Codex tool call is already active"));
     if (!this.#pendingModelReply) {
       return Promise.reject(new Error("Codex is not currently waiting for a model response"));
@@ -186,18 +254,52 @@ export class CodexTurnBridge {
     };
 
     return new Promise<BridgeCallResult>((resolve, reject) => {
-      this.#activeCall = {
+      const startedAt = Date.now();
+      const activeCall: ActiveCall = {
         callId,
         requestFingerprint,
         providerReply,
+        namespace: "functions",
+        name: "exec",
+        startedAt,
         resolve,
         reject,
       };
+      this.#activeCall = activeCall;
+
+      if (options.signal) {
+        const signal = options.signal;
+        const onAbort = () => this.#cancelActiveCall(callId, signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+        activeCall.abortCleanup = () => signal.removeEventListener("abort", onAbort);
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+      }
+
+      this.#emit({
+        type: "call_started",
+        callId,
+        namespace: "functions",
+        name: "exec",
+        input: code,
+        startedAt,
+      });
 
       try {
         respond(providerReply);
       } catch (error) {
+        activeCall.abortCleanup?.();
         this.#activeCall = undefined;
+        this.#emit({
+          type: "call_finished",
+          callId,
+          namespace: "functions",
+          name: "exec",
+          isError: true,
+          durationMs: Date.now() - startedAt,
+        });
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
@@ -207,8 +309,10 @@ export class CodexTurnBridge {
     namespace: string,
     name: string,
     arguments_: Record<string, unknown>,
+    options: BridgeCallOptions = {},
   ): Promise<BridgeCallResult> {
     if (this.#closed) return Promise.reject(new Error("Sideband bridge is closed"));
+    if (options.signal?.aborted) return Promise.reject(callCancellationError(options.signal.reason));
     if (this.#activeCall) return Promise.reject(new Error("A Codex tool call is already active"));
     if (!this.#pendingModelReply) {
       return Promise.reject(new Error("Codex is not currently waiting for a model response"));
@@ -240,18 +344,52 @@ export class CodexTurnBridge {
     };
 
     return new Promise<BridgeCallResult>((resolve, reject) => {
-      this.#activeCall = {
+      const startedAt = Date.now();
+      const activeCall: ActiveCall = {
         callId,
         requestFingerprint,
         providerReply,
+        namespace,
+        name,
+        startedAt,
         resolve,
         reject,
       };
+      this.#activeCall = activeCall;
+
+      if (options.signal) {
+        const signal = options.signal;
+        const onAbort = () => this.#cancelActiveCall(callId, signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+        activeCall.abortCleanup = () => signal.removeEventListener("abort", onAbort);
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+      }
+
+      this.#emit({
+        type: "call_started",
+        callId,
+        namespace,
+        name,
+        arguments: structuredClone(arguments_),
+        startedAt,
+      });
 
       try {
         respond(providerReply);
       } catch (error) {
+        activeCall.abortCleanup?.();
         this.#activeCall = undefined;
+        this.#emit({
+          type: "call_finished",
+          callId,
+          namespace,
+          name,
+          isError: true,
+          durationMs: Date.now() - startedAt,
+        });
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
@@ -263,6 +401,15 @@ export class CodexTurnBridge {
 
     if (!this.#execSpec) this.#rejectReady(new Error(reason));
     if (this.#activeCall) {
+      this.#activeCall.abortCleanup?.();
+      this.#emit({
+        type: "call_finished",
+        callId: this.#activeCall.callId,
+        namespace: this.#activeCall.namespace,
+        name: this.#activeCall.name,
+        isError: true,
+        durationMs: Date.now() - this.#activeCall.startedAt,
+      });
       this.#activeCall.reject(new Error(reason));
       this.#activeCall = undefined;
     }
@@ -272,6 +419,40 @@ export class CodexTurnBridge {
     this.#pendingModelRequestFingerprint = undefined;
     if (respond) respond({ kind: "complete", text: reason });
   }
+
+  #cancelActiveCall(callId: string, reason: unknown): void {
+    const activeCall = this.#activeCall;
+    if (!activeCall || activeCall.callId !== callId) return;
+
+    if (activeCall.cancelled) return;
+    activeCall.cancelled = true;
+    activeCall.abortCleanup?.();
+    const error = callCancellationError(reason);
+    this.#emit({
+      type: "call_finished",
+      callId: activeCall.callId,
+      namespace: activeCall.namespace,
+      name: activeCall.name,
+      isError: true,
+      durationMs: Date.now() - activeCall.startedAt,
+      output: error.message,
+    });
+    activeCall.reject(error);
+  }
+
+  #emit(event: CodexBridgeEvent): void {
+    try {
+      this.#onEvent?.(event);
+    } catch {
+      // Observers are intentionally isolated from bridge/protocol behavior.
+    }
+  }
+}
+
+function callCancellationError(reason: unknown): Error {
+  if (reason instanceof Error) return reason;
+  if (typeof reason === "string" && reason.length > 0) return new Error(reason);
+  return new Error("MCP request cancelled");
 }
 
 function modelRequestFingerprint(body: Record<string, unknown>): string {

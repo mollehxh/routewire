@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   prepareLunaRequest,
+  proxyChildRequest,
   proxyLunaRequest,
+  validateChildResponse,
   validateLunaResponse,
 } from "../src/provider/luna.js";
 
@@ -73,6 +75,22 @@ const okSse = [
 ].join("\n");
 
 describe("Luna provider routing", () => {
+  it("validates completed spawn arguments after added and delta events", () => {
+    const item = {type: "function_call", name: "spawn_agent", namespace: "collaboration", arguments: ""};
+    const events = [
+      {type: "response.output_item.added", item},
+      {type: "response.function_call_arguments.delta", delta: '{"model":'},
+      {type: "response.output_item.done", item: {...item, arguments: JSON.stringify({model: "gpt-6-luna", reasoning_effort: "high"})}},
+    ];
+    const sse = events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("");
+    expect(() => validateChildResponse(sse, ["gpt-6-luna"])).not.toThrow();
+    expect(() => validateChildResponse(sse.replace('gpt-6-luna', 'gpt-6-sol'), ["gpt-6-luna"])).toThrow(/cannot spawn/);
+  });
+
+  it("validates completed response output even without an output_item.done event", () => {
+    const sse = `data: ${JSON.stringify({type: "response.completed", response: {output: [{type: "function_call", name: "spawn_agent", arguments: '{"model":"blocked"}'}]}})}\n\n`;
+    expect(() => validateChildResponse(sse, ["gpt-6-luna"])).toThrow(/cannot spawn/);
+  });
   it("turns synthetic root encrypted task payloads back into plain child input", () => {
     const body = lunaBody();
     body.input.push({
@@ -213,19 +231,75 @@ describe("Luna provider routing", () => {
     ).rejects.toThrow(/cannot spawn model gpt-6-sol/i);
   });
 
-  it("rejects low/medium Luna inference before forwarding", async () => {
-    const fetchImpl = vi.fn();
+  it("forwards medium Luna inference when authenticated", async () => {
+    const fetchImpl = vi.fn(async () => new Response(okSse, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }));
     const { response } = fakeResponse();
     const body = { ...lunaBody(), reasoning: { effort: "medium" } };
 
+    await proxyLunaRequest(
+      fakeRequest({ authorization: "Bearer secret", "chatgpt-account-id": "acct" }),
+      response,
+      body,
+      { fetchImpl: fetchImpl as typeof fetch },
+    );
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rejects reasoning effort unsupported by the selected model before forwarding", async () => {
+    const fetchImpl = vi.fn();
+    const { response } = fakeResponse();
+    const body = { ...lunaBody(), model: "gpt-5.5", reasoning: { effort: "max" } };
+
     await expect(
-      proxyLunaRequest(
-        fakeRequest({ authorization: "Bearer secret" }),
+      proxyChildRequest(
+        fakeRequest({ authorization: "Bearer secret", "chatgpt-account-id": "acct" }),
         response,
         body,
-        { fetchImpl: fetchImpl as typeof fetch },
+        {
+          fetchImpl: fetchImpl as typeof fetch,
+          allowedModels: ["gpt-5.5"],
+          modelEfforts: { "gpt-5.5": ["low", "medium", "high", "xhigh"] },
+        },
       ),
-    ).rejects.toThrow(/reasoning effort is not allowed/i);
+    ).rejects.toThrow(/not supported by gpt-5.5/i);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+  it("proxies another explicitly allowed Codex child model", async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body.model).toBe("gpt-5.6-terra");
+      return new Response(okSse, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const { response } = fakeResponse();
+    await proxyChildRequest(
+      fakeRequest({ authorization: "Bearer secret-token", "chatgpt-account-id": "acct" }),
+      response,
+      { ...lunaBody(), model: "gpt-5.6-terra" },
+      { fetchImpl: fetchImpl as typeof fetch, allowedModels: ["gpt-5.6-terra"] },
+    );
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("rejects descendant spawns outside the configured allowlist", () => {
+    const invalid = [
+      "event: response.output_item.done",
+      `data: ${JSON.stringify({
+        type: "response.output_item.done",
+        item: {
+          type: "function_call",
+          namespace: "collaboration",
+          name: "spawn_agent",
+          arguments: JSON.stringify({ model: "gpt-5.6-sol" }),
+        },
+      })}`,
+      "",
+    ].join("\n");
+    expect(() => validateChildResponse(invalid, ["gpt-6-luna", "gpt-5.6-terra"])).toThrow(
+      /cannot spawn model gpt-5.6-sol/i,
+    );
+  });
+
 });

@@ -6,6 +6,7 @@ import {
   terminateProcessTree,
 } from "../process-tree.js";
 import { buildCodexArgs } from "./command.js";
+import type { CodexApprovalPolicy, CodexSandboxMode } from "../tui-settings.js";
 
 export interface StartCodexProcessOptions {
   cwd: string;
@@ -13,6 +14,9 @@ export interface StartCodexProcessOptions {
   providerBaseUrl: string;
   codexHome?: string;
   dangerFullAccess?: boolean;
+  sandboxMode?: CodexSandboxMode;
+  approvalPolicy?: CodexApprovalPolicy;
+  fastMode?: boolean;
   quiet?: boolean;
   command?: string;
 }
@@ -34,6 +38,9 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
     model: options.model,
     providerBaseUrl: options.providerBaseUrl,
     dangerFullAccess: options.dangerFullAccess,
+    sandboxMode: options.sandboxMode,
+    approvalPolicy: options.approvalPolicy,
+    fastMode: options.fastMode,
   });
 
   const env = { ...process.env };
@@ -47,10 +54,13 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
     detached: shouldCreateProcessGroup(),
   });
 
-  if (!options.quiet) {
-    child.stdout?.on("data", chunk => process.stdout.write(`[codex stdout] ${String(chunk)}`));
-    child.stderr?.on("data", chunk => process.stderr.write(`[codex stderr] ${String(chunk)}`));
-  }
+  // Quiet controls presentation, never consumption of the child's pipes.
+  child.stdout?.on("data", chunk => {
+    if (!options.quiet) process.stdout.write(`[codex stdout] ${String(chunk)}`);
+  });
+  child.stderr?.on("data", chunk => {
+    if (!options.quiet) process.stderr.write(`[codex stderr] ${String(chunk)}`);
+  });
 
   child.stdin?.on("error", () => undefined);
   child.stdin?.end("Sideband bridge turn. Follow the model response.\n");

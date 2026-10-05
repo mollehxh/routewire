@@ -2,10 +2,16 @@ import { CodexTurnBridge } from "./bridge.js";
 import { startCodexProcess, type CodexExit } from "./codex/process.js";
 import { SidebandHttpSurface } from "./http-surface.js";
 import { selectCollaborationTools } from "./mcp/collaboration-tools.js";
-import { discoverProjectedNativeTools } from "./mcp/projected-tools.js";
-import { createSidebandMcpServer } from "./mcp/server.js";
+import { discoverProjectedNativeTools, projectedToolsFingerprint } from "./mcp/projected-tools.js";
+import { createSidebandMcpServer, updateSidebandProjectedTools } from "./mcp/server.js";
 import { discoverNativeSkillTools } from "./mcp/skill-tools.js";
+import {
+  loadCodexModelCatalog,
+  type CodexModelCatalogEntry,
+} from "./model-catalog.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
+import type { SidebandRuntimeEvent } from "./runtime-events.js";
+import type { CodexApprovalPolicy, CodexSandboxMode } from "./tui-settings.js";
 import { ensureTunnelClient } from "./tunnel/install.js";
 import { startTunnelClient, type StartTunnelClientOptions, type TunnelClientHandle } from "./tunnel/process.js";
 
@@ -18,9 +24,16 @@ export interface StartSidebandOptions {
   port?: number;
   codexHome?: string;
   dangerFullAccess?: boolean;
+  sandboxMode?: CodexSandboxMode;
+  approvalPolicy?: CodexApprovalPolicy;
+  fastMode?: boolean;
+  allowedSubagentModels?: readonly string[];
+  modelCatalog?: readonly CodexModelCatalogEntry[];
   quietCodex?: boolean;
   codexCommand?: string;
+  startupTimeoutMs?: number;
   tunnel?: SidebandTunnelOptions;
+  onEvent?: (event: SidebandRuntimeEvent) => void;
 }
 
 export interface SidebandRuntime {
@@ -36,64 +49,135 @@ export interface SidebandRuntime {
 
 export async function startSideband(options: StartSidebandOptions): Promise<SidebandRuntime> {
   const model = options.model ?? "gpt-5.6-sol";
-  const bridge = new CodexTurnBridge({ model });
+  const modelCatalog = options.modelCatalog ?? loadCodexModelCatalog(options.codexHome);
+  const allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
+  const subagentModelEfforts = Object.fromEntries(
+    modelCatalog.map(entry => [entry.id, entry.efforts] as const),
+  );
+  const emit = (event: SidebandRuntimeEvent) => {
+    try {
+      options.onEvent?.(event);
+    } catch {
+      // Runtime observers must not affect transport or Codex lifecycle behavior.
+    }
+  };
+  const bridge = new CodexTurnBridge({ model, onEvent: emit });
   const surface = new SidebandHttpSurface({
     bridge,
     host: options.host,
     port: options.port,
+    allowedSubagentModels,
+    subagentModelEfforts,
+    onEvent: emit,
   });
+  emit({ type: "component", component: "mcp", state: "starting" });
   await surface.start();
+  emit({ type: "component", component: "mcp", state: "ready", detail: surface.mcpUrl });
 
+  emit({ type: "component", component: "codex", state: "starting" });
   const codex = startCodexProcess({
     cwd: options.cwd,
     model,
     providerBaseUrl: surface.providerBaseUrl,
     codexHome: options.codexHome,
     dangerFullAccess: options.dangerFullAccess,
+    sandboxMode: options.sandboxMode,
+    approvalPolicy: options.approvalPolicy,
+    fastMode: options.fastMode,
     quiet: options.quietCodex,
     command: options.codexCommand,
   });
 
   let closing = false;
+  let startupComplete = false;
   let tunnel: TunnelClientHandle | undefined;
-  try {
-    const execSpec = await Promise.race([
-      bridge.ready(),
-      codex.exited.then(exit => {
-        throw codexExitedBeforeReady(exit);
-      }),
-    ]);
-
-    const projectedTools = await discoverProjectedNativeTools(bridge);
-    const nativeSkillTools = await discoverNativeSkillTools(bridge);
-    const collaborationTools = selectCollaborationTools(bridge.collaborationTools());
-
-    surface.setMcpServer(
-      createSidebandMcpServer({
-        bridge,
-        execSpec,
-        projectedTools,
-        nativeSkillTools,
-        collaborationTools,
-      }),
-      execSpec,
-      projectedTools,
-      nativeSkillTools,
-      collaborationTools,
-    );
-
-    const codexExitWatch = codex.exited.then(exit => {
-      if (!closing) {
-        bridge.close(
-          exit.error
-            ? `Codex process failed: ${exit.error.message}`
-            : `Codex process exited (code=${String(exit.code)}, signal=${String(exit.signal)})`,
-        );
+  let closePromise: Promise<void> | undefined;
+  const close = (): Promise<void> => {
+    if (closePromise) return closePromise;
+    closing = true;
+    closePromise = (async () => {
+      // Every resource gets cleanup even if another cleanup rejects.
+      const tunnelClose = Promise.allSettled([tunnel?.close()]);
+      bridge.close("Sideband shutting down");
+      const exitedNaturally = await Promise.race([codex.exited.then(() => true), delay(750).then(() => false)]);
+      if (!exitedNaturally) {
+        codex.terminate();
+        const terminated = await Promise.race([codex.exited.then(() => true), delay(1_000).then(() => false)]);
+        if (!terminated) {
+          codex.forceTerminate();
+          await Promise.race([codex.exited, delay(1_000)]);
+        }
       }
-      return exit;
+      const results = (await Promise.all([tunnelClose, Promise.allSettled([surface.close()])])).flat();
+      if (tunnel) emit({ type: "component", component: "tunnel", state: "stopped" });
+      emit({ type: "component", component: "codex", state: "stopped" });
+      emit({ type: "component", component: "mcp", state: "stopped" });
+      const failure = results.find(result => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    })();
+    return closePromise;
+  };
+  // Observe exits before the first provider request, including discovery.
+  const codexExitWatch = codex.exited.then(exit => {
+    if (!closing) {
+      const error = startupComplete
+        ? new Error(exit.error?.message ?? `Codex process exited (code=${String(exit.code)}, signal=${String(exit.signal)})`)
+        : codexExitedBeforeReady(exit);
+      emit({ type: "component", component: "codex", state: "error", detail: error.message });
+      bridge.close(error.message);
+      if (startupComplete) void close().catch(error => emit({
+        type: "component", component: "mcp", state: "error", detail: String(error),
+      }));
+    }
+    return exit;
+  });
+  let startupTimer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    startupTimer = setTimeout(() => reject(new Error("Sideband startup timed out")), options.startupTimeoutMs ?? 60_000);
+  });
+  const initialize = async (): Promise<SidebandRuntime> => {
+    const execSpec = await bridge.ready();
+
+    let projectedTools = await discoverProjectedNativeTools(bridge);
+    const nativeSkillTools = await discoverNativeSkillTools(bridge, {
+      cwd: options.cwd,
+      codexHome: options.codexHome,
+      codexCommand: options.codexCommand,
+    });
+    if (closing) throw new Error("Sideband startup cancelled");
+    const collaborationTools = selectCollaborationTools(bridge.collaborationTools(), {
+      allowedModels: allowedSubagentModels,
+      catalog: modelCatalog,
     });
 
+    let refresh: Promise<typeof projectedTools> | undefined;
+    const refreshProjectedTools = (): Promise<typeof projectedTools> => {
+      if (refresh) return refresh;
+      if (!bridge.idle || closing) return Promise.resolve(projectedTools);
+      refresh = discoverProjectedNativeTools(bridge).then(tools => {
+        if (closing) return projectedTools;
+        const changed = projectedToolsFingerprint(tools) !== projectedToolsFingerprint(projectedTools);
+        if (changed) {
+          projectedTools = tools;
+          updateSidebandProjectedTools(mcpServer, tools);
+          surface.updateProjectedTools(tools);
+        }
+        return projectedTools;
+      }).catch(error => {
+        if (closing) return projectedTools;
+        throw error;
+      }).finally(() => {refresh = undefined;});
+      return refresh;
+    };
+    const mcpServer = createSidebandMcpServer({
+      bridge, execSpec, projectedTools, nativeSkillTools, collaborationTools, onEvent: emit,
+      refreshProjectedTools,
+    });
+    surface.setMcpServer(mcpServer, execSpec, projectedTools, nativeSkillTools, collaborationTools, refreshProjectedTools);
+    emit({ type: "component", component: "codex", state: "ready", detail: model });
+
     if (options.tunnel) {
+      emit({ type: "component", component: "tunnel", state: "starting" });
       const tunnelStartup = (async () => {
         const tunnelCommand =
           options.tunnel!.command ?? (await ensureTunnelClient());
@@ -111,7 +195,37 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
         void tunnelStartup.then(handle => handle.close()).catch(() => undefined);
         throw codexExitedDuringTunnelStartup(startupResult.exit);
       }
+      if (closing) {
+        await startupResult.handle.close();
+        throw new Error("Sideband startup cancelled");
+      }
       tunnel = startupResult.handle;
+      emit({
+        type: "component",
+        component: "tunnel",
+        state: "ready",
+        detail: tunnel.healthUrl,
+      });
+      void tunnel.exited.then(exit => {
+        if (closing) return;
+        emit({
+          type: "component",
+          component: "tunnel",
+          state: "error",
+          detail: exit.error?.message ?? `exited with code ${String(exit.code)}`,
+        });
+      });
+      void tunnel.unhealthy.then(error => {
+        if (closing) return;
+        emit({
+          type: "component",
+          component: "tunnel",
+          state: "error",
+          detail: error.message,
+        });
+      });
+    } else {
+      emit({ type: "component", component: "tunnel", state: "stopped" });
     }
 
     return {
@@ -122,38 +236,23 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       execSpec,
       tunnelHealthUrl: tunnel?.healthUrl,
       codexExited: codex.exited,
-      async close() {
-        if (closing) return;
-        closing = true;
-        await tunnel?.close();
-        bridge.close("Sideband shutting down");
-
-        const exitedNaturally = await Promise.race([
-          codex.exited.then(() => true),
-          delay(750).then(() => false),
-        ]);
-        if (!exitedNaturally) {
-          codex.terminate();
-          const exitedAfterTerminate = await Promise.race([
-            codex.exited.then(() => true),
-            delay(1_000).then(() => false),
-          ]);
-          if (!exitedAfterTerminate) {
-            codex.forceTerminate();
-            await Promise.race([codex.exited, delay(1_000)]);
-          }
-        }
-
-        await surface.close();
-      },
+      close,
     };
+  };
+  try {
+    const runtime = await Promise.race([
+      initialize(),
+      timeout,
+      codexExitWatch.then(exit => { throw codexExitedBeforeReady(exit); }),
+    ]);
+    startupComplete = true;
+    return runtime;
   } catch (error) {
-    closing = true;
-    await tunnel?.close();
-    bridge.close("Sideband startup failed");
-    codex.forceTerminate();
-    await surface.close();
+    emit({ type: "component", component: "codex", state: "error", detail: String(error) });
+    await close().catch(() => undefined);
     throw error;
+  } finally {
+    clearTimeout(startupTimer);
   }
 }
 

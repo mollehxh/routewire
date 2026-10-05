@@ -1,11 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { CodexTurnBridge } from "../bridge.js";
+import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
-import { cleanCodeModeResult, isRecord } from "../provider/protocol.js";
+import { isRecord } from "../provider/protocol.js";
 import {
-  compactExecDescription,
-  SIDEBAND_EXEC_GUIDANCE,
   wrapExecCode,
 } from "../tool-policy.js";
 import {
@@ -18,6 +16,9 @@ import {
   invokeCollaborationTool,
   type CollaborationTool,
 } from "./collaboration-tools.js";
+import {z} from "zod";
+import {execToolDefinition} from "./exec-tool.js";
+import {invokeExecAndWait} from "./code-mode.js";
 import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
@@ -39,6 +40,8 @@ export interface ModernMcpContext {
   projectedTools?: ProjectedNativeTool[];
   nativeSkillTools?: NativeSkillTools;
   collaborationTools?: CollaborationTool[];
+  onEvent?: (event: CodexBridgeEvent) => void;
+  refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
 }
 
 export async function handleModernMcpRequest(
@@ -105,6 +108,7 @@ export async function handleModernMcpRequest(
   }
 
   if (body.method === "tools/list") {
+    if (context.refreshProjectedTools) context.projectedTools = await context.refreshProjectedTools();
     sendJson(res, 200, rpcResult(id, {
       resultType: "complete",
       tools: [
@@ -133,6 +137,7 @@ export async function handleModernMcpRequest(
       return true;
     }
     const args = isRecord(params.arguments) ? params.arguments : {};
+    const cancellation = requestCancellation(req, res);
 
     try {
       const projected = (context.projectedTools ?? []).find(tool => tool.name === name);
@@ -144,22 +149,29 @@ export async function handleModernMcpRequest(
       if (name === SIDEBAND_BOOTSTRAP_TOOL.name) {
         result = await invokeBootstrap(context.bridge, context.nativeSkillTools);
       } else if (projected) {
-        result = await invokeProjectedNativeTool(context.bridge, projected, args);
+        result = await invokeProjectedNativeTool(context.bridge, projected, args, {
+          signal: cancellation.signal,
+        });
       } else if (collaboration) {
-        result = await invokeCollaborationTool(context.bridge, collaboration, args);
+        result = await invokeCollaborationTool(context.bridge, collaboration, args, {
+          signal: cancellation.signal,
+        });
       } else if (skillDefinition && context.nativeSkillTools) {
         result = await invokeSidebandSkillTool(
           context.bridge,
           context.nativeSkillTools,
           skillDefinition.name,
           args,
+          { onEvent: context.onEvent },
         );
       } else if (name === "exec") {
         if (typeof args.code !== "string" || args.code.length === 0) {
           sendJson(res, 200, rpcError(id, -32602, "exec requires a non-empty string argument: code"));
           return true;
         }
-        result = cleanCodeModeResult(await context.bridge.invokeExec(wrapExecCode(args.code)));
+        result = await invokeExecAndWait(context.bridge, wrapExecCode(args.code), {
+          signal: cancellation.signal,
+        });
       } else {
         sendJson(res, 200, rpcError(id, -32602, `Unknown tool: ${name}`));
         return true;
@@ -171,12 +183,16 @@ export async function handleModernMcpRequest(
         _meta: serverMeta(),
       }));
     } catch (error) {
-      sendJson(res, 200, rpcResult(id, {
-        resultType: "complete",
-        content: [{ type: "text", text: errorMessage(error) }],
-        isError: true,
-        _meta: serverMeta(),
-      }));
+      if (!res.destroyed && !res.writableEnded) {
+        sendJson(res, 200, rpcResult(id, {
+          resultType: "complete",
+          content: [{ type: "text", text: errorMessage(error) }],
+          isError: true,
+          _meta: serverMeta(),
+        }));
+      }
+    } finally {
+      cancellation.dispose();
     }
     return true;
   }
@@ -224,23 +240,9 @@ function modernCollaborationTool(tool: CollaborationTool): Record<string, unknow
 }
 
 function modernExecTool(execSpec: ExecToolSpec): Record<string, unknown> {
-  return {
-    name: "exec",
-    title: "Codex exec",
-    description: `${compactExecDescription(execSpec.description)}\n\n${SIDEBAND_EXEC_GUIDANCE}`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        code: {
-          type: "string",
-          minLength: 1,
-          description: "Raw JavaScript source for Codex functions.exec. Do not wrap it in JSON or markdown fences.",
-        },
-      },
-      required: ["code"],
-      additionalProperties: false,
-    },
-  };
+  const definition = execToolDefinition(execSpec);
+  const {$schema: _dialect, ...inputSchema} = z.toJSONSchema(definition.inputSchema);
+  return {...definition, inputSchema};
 }
 
 function serverMeta(): Record<string, unknown> {
@@ -299,4 +301,28 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function requestCancellation(
+  req: IncomingMessage,
+  res: ServerResponse,
+): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const abort = () => {
+    if (!controller.signal.aborted) controller.abort(new Error("MCP request cancelled"));
+  };
+  const onResponseClose = () => {
+    if (!res.writableEnded) abort();
+  };
+
+  req.once("aborted", abort);
+  res.once("close", onResponseClose);
+
+  return {
+    signal: controller.signal,
+    dispose() {
+      req.off("aborted", abort);
+      res.off("close", onResponseClose);
+    },
+  };
 }
