@@ -65,7 +65,7 @@ describe("Routewire Ink TUI", () => {
     state.update = {
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      command: "npm install -g routewire@latest",
+      command: "npm install -g --prefer-online routewire@0.2.0",
       status: "available",
     };
     const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
@@ -75,7 +75,7 @@ describe("Routewire Ink TUI", () => {
     expect(frame).toContain("0.2.0");
     expect(frame).toContain("Update now");
     expect(frame).toContain("Continue with 0.1.0");
-    expect(frame).toContain("npm install -g routewire@latest");
+    expect(frame).toContain("npm install -g --prefer-online routewire@0.2.0");
     ui.unmount();
   });
 

@@ -83,18 +83,21 @@ export async function checkForRoutewireUpdate(
     });
     if (!response.ok) return undefined;
     const payload = await response.json() as {version?: unknown};
-    if (typeof payload.version !== "string" || !parseSemver(payload.version)) return undefined;
-    await writeUpdateCache(cacheFile, {checkedAt: now(), latestVersion: payload.version, registry});
-    return updateInfo(currentVersion, payload.version, options.packageManager);
+    if (typeof payload.version !== "string") return undefined;
+    const latestVersion = payload.version.trim();
+    if (!parseSemver(latestVersion)) return undefined;
+    await writeUpdateCache(cacheFile, {checkedAt: now(), latestVersion, registry});
+    return updateInfo(currentVersion, latestVersion, options.packageManager);
   } catch {
     return undefined;
   }
 }
 
 export function createRoutewireUpdateAction(
+  version: string,
   packageManager: RoutewirePackageManager = detectRoutewirePackageManager(),
 ): RoutewireUpdateAction {
-  const spec = `${ROUTEWIRE_NAME}@latest`;
+  const spec = `${ROUTEWIRE_NAME}@${version}`;
   if (packageManager === "pnpm") {
     return {command: "pnpm", args: ["add", "--global", spec], display: `pnpm add -g ${spec}`};
   }
@@ -104,7 +107,11 @@ export function createRoutewireUpdateAction(
   if (packageManager === "bun") {
     return {command: "bun", args: ["add", "--global", spec], display: `bun add -g ${spec}`};
   }
-  return {command: "npm", args: ["install", "--global", spec], display: `npm install -g ${spec}`};
+  return {
+    command: "npm",
+    args: ["install", "--global", "--prefer-online", spec],
+    display: `npm install -g --prefer-online ${spec}`,
+  };
 }
 
 export function detectRoutewirePackageManager(): RoutewirePackageManager {
@@ -191,7 +198,7 @@ function updateInfo(
   return {
     currentVersion,
     latestVersion,
-    action: createRoutewireUpdateAction(packageManager),
+    action: createRoutewireUpdateAction(latestVersion, packageManager),
   };
 }
 
@@ -240,8 +247,9 @@ async function readUpdateCache(file: string): Promise<UpdateCache | undefined> {
       typeof parsed.latestVersion !== "string" ||
       typeof parsed.registry !== "string"
     ) return undefined;
-    if (!parseSemver(parsed.latestVersion)) return undefined;
-    return {checkedAt: parsed.checkedAt!, latestVersion: parsed.latestVersion, registry: parsed.registry};
+    const latestVersion = parsed.latestVersion.trim();
+    if (!parseSemver(latestVersion)) return undefined;
+    return {checkedAt: parsed.checkedAt!, latestVersion, registry: parsed.registry};
   } catch {
     return undefined;
   }

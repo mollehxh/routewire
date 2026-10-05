@@ -36,7 +36,7 @@ function setup(onUpdate = vi.fn()) {
   tui.showAvailableUpdate({
     currentVersion: "0.1.0",
     latestVersion: "0.2.0",
-    action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+    action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
   });
   cleanup.push(() => tui.stop());
   return {tui, onUpdate};

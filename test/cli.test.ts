@@ -141,7 +141,7 @@ describe("interactive CLI lifecycle", () => {
     mocks.checkForRoutewireUpdate.mockResolvedValue({
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+      action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
     });
     const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     done = runInteractive(parseCliOptions([]));
@@ -152,7 +152,7 @@ describe("interactive CLI lifecycle", () => {
     await vi.waitFor(() => expect(tui.showAvailableUpdate).toHaveBeenCalledWith({
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+      action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
     }));
     tui.options.onUpdate?.();
     await done;
@@ -161,7 +161,7 @@ describe("interactive CLI lifecycle", () => {
       {
         currentVersion: "0.1.0",
         latestVersion: "0.2.0",
-        action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+        action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
       },
       {signal: expect.any(AbortSignal)},
     );
@@ -174,7 +174,7 @@ describe("interactive CLI lifecycle", () => {
     mocks.checkForRoutewireUpdate.mockResolvedValue({
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+      action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
     });
     let signal: AbortSignal | undefined;
     mocks.installRoutewireUpdate.mockImplementation((_update, options) => {
@@ -202,7 +202,7 @@ describe("interactive CLI lifecycle", () => {
     mocks.checkForRoutewireUpdate.mockResolvedValue({
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+      action: {command: "npm", args: ["install", "--global", "--prefer-online", "routewire@0.2.0"], display: "npm install -g --prefer-online routewire@0.2.0"},
     });
     mocks.installRoutewireUpdate.mockRejectedValue(new Error("permission denied"));
     done = runInteractive(parseCliOptions([]));

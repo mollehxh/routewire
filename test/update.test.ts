@@ -42,7 +42,11 @@ class FakeChild extends EventEmitter {
 const update: RoutewireUpdateInfo = {
   currentVersion: "0.1.0",
   latestVersion: "0.2.0",
-  action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
+  action: {
+    command: "npm",
+    args: ["install", "--global", "--prefer-online", "routewire@0.2.0"],
+    display: "npm install -g --prefer-online routewire@0.2.0",
+  },
 };
 
 function tempCacheFile(): string {
@@ -59,7 +63,7 @@ function registryResponse(version: string): Response {
 }
 
 describe("Routewire update checks", () => {
-  it("offers a newer npm release and pins the installer to latest", async () => {
+  it("offers a newer npm release and pins the installer to the verified version", async () => {
     const update = await checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
@@ -72,8 +76,8 @@ describe("Routewire update checks", () => {
       latestVersion: "0.2.0",
       action: {
         command: "npm",
-        args: ["install", "--global", "routewire@latest"],
-        display: "npm install -g routewire@latest",
+        args: ["install", "--global", "--prefer-online", "routewire@0.2.0"],
+        display: "npm install -g --prefer-online routewire@0.2.0",
       },
     });
   });
@@ -87,6 +91,18 @@ describe("Routewire update checks", () => {
       });
       expect(update).toBeUndefined();
     }
+  });
+
+  it("normalizes registry semver before building the install spec", async () => {
+    const update = await checkForRoutewireUpdate({
+      currentVersion: "0.1.0",
+      cacheFile: tempCacheFile(),
+      packageManager: "npm",
+      fetchImpl: async () => registryResponse(" 0.2.0 "),
+    });
+
+    expect(update?.latestVersion).toBe("0.2.0");
+    expect(update?.action.args).toContain("routewire@0.2.0");
   });
 
   it("uses a fresh cached registry result across launches", async () => {
@@ -212,9 +228,10 @@ describe("Routewire update checks", () => {
   });
 
   it("builds install commands for supported package managers", () => {
-    expect(createRoutewireUpdateAction("pnpm").display).toBe("pnpm add -g routewire@latest");
-    expect(createRoutewireUpdateAction("yarn").display).toBe("yarn global add routewire@latest");
-    expect(createRoutewireUpdateAction("bun").display).toBe("bun add -g routewire@latest");
+    expect(createRoutewireUpdateAction("0.2.0", "npm").display).toBe("npm install -g --prefer-online routewire@0.2.0");
+    expect(createRoutewireUpdateAction("0.2.0", "pnpm").display).toBe("pnpm add -g routewire@0.2.0");
+    expect(createRoutewireUpdateAction("0.2.0", "yarn").display).toBe("yarn global add routewire@0.2.0");
+    expect(createRoutewireUpdateAction("0.2.0", "bun").display).toBe("bun add -g routewire@0.2.0");
   });
 
   it("detects the package manager from runtime hints", () => {
@@ -281,7 +298,7 @@ describe("Routewire update installer", () => {
     const result = installRoutewireUpdate(update, {timeoutMs: 50});
     const rejection = expect(result).rejects.toThrow("Update timed out after 50ms");
     await vi.advanceTimersByTimeAsync(50);
-    expect(mocks.spawn).toHaveBeenCalledWith("npm", ["install", "--global", "routewire@latest"], {
+    expect(mocks.spawn).toHaveBeenCalledWith("npm", ["install", "--global", "--prefer-online", "routewire@0.2.0"], {
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
