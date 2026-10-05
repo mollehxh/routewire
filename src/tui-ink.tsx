@@ -330,23 +330,23 @@ function SettingsBreadcrumb({view}: {view: InkView}) {
 function InternalBreadcrumb({
   segments,
   rightText,
-  subtext,
+  contextText,
 }: {
   segments: readonly string[];
   rightText?: string;
-  subtext?: string;
+  contextText?: string;
 }) {
   return (
     <Box
       width="100%"
-      flexDirection="column"
       borderStyle="single"
       borderTop={false}
       borderLeft={false}
       borderRight={false}
       borderBottomDimColor
+      justifyContent="space-between"
     >
-      <Box width="100%" justifyContent="space-between">
+      <Box flexGrow={1} flexShrink={1}>
         <Box>
           <Text color={ROUTEWIRE_ACCENT} bold>//&gt;</Text>
           <Text>  </Text>
@@ -357,9 +357,17 @@ function InternalBreadcrumb({
             </Box>
           ))}
         </Box>
-        {rightText ? <Text dimColor>{rightText}</Text> : null}
+        {contextText ? (
+          <Box flexGrow={1} flexShrink={1} marginLeft={2}>
+            <Text dimColor wrap="truncate-middle">{contextText}</Text>
+          </Box>
+        ) : null}
       </Box>
-      {subtext ? <Text dimColor wrap="truncate-middle">{subtext}</Text> : null}
+      {rightText ? (
+        <Box marginLeft={2} flexShrink={0}>
+          <Text dimColor>{rightText}</Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }
@@ -480,7 +488,7 @@ function ActivityView({
     : 0;
   const splitLayout = activeAgents.length > 0 && terminalColumns >= agentPanelWidth + 58;
   const agentRows = !splitLayout && activeAgents.length > 0 ? activeAgents.length + 2 : 0;
-  const visibleCount = Math.max(4, terminalRows - 7 - agentRows);
+  const visibleCount = Math.max(4, terminalRows - 6 - agentRows);
   const maxScrollTop = Math.max(0, events.length - visibleCount);
   const initialScrollTop = state.selection > 0
     ? Math.min(state.selection, maxScrollTop)
@@ -547,7 +555,7 @@ function ActivityView({
       <InternalBreadcrumb
         segments={["activity"]}
         rightText={`${events.length} event${events.length === 1 ? "" : "s"}`}
-        subtext={state.cwd}
+        contextText={state.cwd}
       />
       <Box flexGrow={1} flexDirection="column">
         {splitLayout ? (

@@ -207,8 +207,8 @@ describe("Routewire Ink TUI", () => {
     const frame = ui.lastFrame() ?? "";
     const headerLine = frame.split("\n").find(line => line.includes("//>  activity")) ?? "";
     expect(headerLine).toContain("//>  activity");
+    expect(headerLine).toContain("/repo");
     expect(headerLine).toContain("1 event");
-    expect(frame).toContain("/repo");
     expect(frame).toContain("shell");
     expect(frame).toContain("npm test");
     expect(frame).toContain("running");
