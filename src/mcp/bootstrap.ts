@@ -17,7 +17,7 @@ export interface BootstrapToolDefinition {
 
 const bootstrapInputSchema = z.object({});
 
-export const SIDEBAND_BOOTSTRAP_TOOL: BootstrapToolDefinition = {
+export const RUNWIRE_BOOTSTRAP_TOOL: BootstrapToolDefinition = {
   name: "bootstrap",
   title: "Load Codex context",
   description:

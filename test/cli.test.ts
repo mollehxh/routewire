@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CodexExit } from "../src/codex/process.js";
-import type { SidebandRuntime } from "../src/runtime.js";
+import type { RunwireRuntime } from "../src/runtime.js";
 import type { RunwireTuiOptions } from "../src/tui.js";
 import { DEFAULT_RUNWIRE_SETTINGS } from "../src/tui-settings.js";
 
 const mocks = vi.hoisted(() => ({
-  startSideband: vi.fn(),
+  startRunwire: vi.fn(),
   instances: [] as Array<{
     options: RunwireTuiOptions;
     stop: ReturnType<typeof vi.fn>;
     setRuntimeState: ReturnType<typeof vi.fn>;
   }>,
 }));
-vi.mock("../src/runtime.js", () => ({ startSideband: mocks.startSideband }));
+vi.mock("../src/runtime.js", () => ({ startRunwire: mocks.startRunwire }));
 vi.mock("../src/model-catalog.js", () => ({ loadCodexModelCatalog: () => [] }));
 vi.mock("../src/tui-settings.js", async importOriginal => ({
   ...await importOriginal<typeof import("../src/tui-settings.js")>(),
@@ -43,17 +43,17 @@ function deferred<T>() {
 }
 function runtime(close = vi.fn().mockResolvedValue(undefined)) {
   const exit = deferred<CodexExit>();
-  return { value: { close, codexExited: exit.promise } as unknown as SidebandRuntime, close, exit };
+  return { value: { close, codexExited: exit.promise } as unknown as RunwireRuntime, close, exit };
 }
 
 let done: Promise<void> | undefined;
 let listeners: Record<string, Function[]>;
 beforeEach(() => {
   mocks.instances.length = 0;
-  mocks.startSideband.mockReset();
+  mocks.startRunwire.mockReset();
   listeners = Object.fromEntries(lifecycleSignals.map(signal => [signal, signalListeners(signal)]));
-  vi.stubEnv("SIDEBAND_TUNNEL_ID", "");
-  vi.stubEnv("SIDEBAND_TUNNEL_API_KEY_FILE", "");
+  vi.stubEnv("RUNWIRE_TUNNEL_ID", "");
+  vi.stubEnv("RUNWIRE_TUNNEL_API_KEY_FILE", "");
   vi.stubEnv("CONTROL_PLANE_API_KEY", "");
 });
 afterEach(async () => {
@@ -77,7 +77,7 @@ function startInteractive() {
 describe("interactive CLI lifecycle", () => {
   it("restores the terminal and completes Quit when runtime cleanup rejects", async () => {
     const current = runtime(vi.fn().mockRejectedValue(new Error("cleanup failed")));
-    mocks.startSideband.mockResolvedValue(current.value);
+    mocks.startRunwire.mockResolvedValue(current.value);
     const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
     const tui = startInteractive();
     await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("running"));
@@ -85,33 +85,33 @@ describe("interactive CLI lifecycle", () => {
     await done;
     expect(current.close).toHaveBeenCalledTimes(1);
     expect(tui.stop).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(stderr).toHaveBeenCalledWith("[sideband] cleanup failed\n"));
+    await vi.waitFor(() => expect(stderr).toHaveBeenCalledWith("[runwire] cleanup failed\n"));
   });
 
   it("waits for Stop cleanup before launching a queued replacement", async () => {
     const cleanup = deferred<void>();
     const first = runtime(vi.fn().mockImplementation(() => cleanup.promise));
     const second = runtime();
-    mocks.startSideband.mockResolvedValueOnce(first.value).mockResolvedValueOnce(second.value);
+    mocks.startRunwire.mockResolvedValueOnce(first.value).mockResolvedValueOnce(second.value);
     const tui = startInteractive();
     await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("running"));
     tui.options.onStop?.();
     tui.options.onStart?.(structuredClone(DEFAULT_RUNWIRE_SETTINGS));
     await vi.waitFor(() => expect(first.close).toHaveBeenCalledTimes(1));
-    expect(mocks.startSideband).toHaveBeenCalledTimes(1);
+    expect(mocks.startRunwire).toHaveBeenCalledTimes(1);
     cleanup.resolve();
-    await vi.waitFor(() => expect(mocks.startSideband).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(mocks.startRunwire).toHaveBeenCalledTimes(2));
     expect(second.close).not.toHaveBeenCalled();
   });
 
   it("ignores a previous process exit after its replacement becomes active", async () => {
     const first = runtime();
     const second = runtime();
-    mocks.startSideband.mockResolvedValueOnce(first.value).mockResolvedValueOnce(second.value);
+    mocks.startRunwire.mockResolvedValueOnce(first.value).mockResolvedValueOnce(second.value);
     const tui = startInteractive();
     await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("running"));
     tui.options.onStart?.(structuredClone(DEFAULT_RUNWIRE_SETTINGS));
-    await vi.waitFor(() => expect(mocks.startSideband).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(mocks.startRunwire).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(tui.setRuntimeState.mock.calls.filter(([state]) => state === "running")).toHaveLength(2));
     tui.setRuntimeState.mockClear();
     first.exit.resolve({ code: 23, signal: null });

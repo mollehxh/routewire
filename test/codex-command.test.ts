@@ -13,7 +13,7 @@ describe("buildCodexArgs", () => {
     });
 
     expect(args).toContain("gpt-5.6-sol");
-    expect(args).toContain('model_provider="sideband"');
+    expect(args).toContain('model_provider="runwire"');
     expect(args.join(" ")).toContain("127.0.0.1:3210/v1");
     expect(args).toContain("--ephemeral");
     expect(args).toContain("-s");

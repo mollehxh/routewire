@@ -20,7 +20,7 @@ function sha256(data: Uint8Array | string): string {
 
 describe("ensureTunnelClient", () => {
   it("verifies the pinned checksum manifest and platform ZIP before caching the binary", async () => {
-    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "sideband-tunnel-install-"));
+    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-install-"));
     tempDirs.push(cacheDir);
 
     const zip = new AdmZip();
@@ -61,7 +61,7 @@ describe("ensureTunnelClient", () => {
   });
 
   it("fails closed when the checksum manifest does not match the pinned digest", async () => {
-    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "sideband-tunnel-install-"));
+    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-install-"));
     tempDirs.push(cacheDir);
     const fetchImpl = vi.fn(async () => new Response("bad manifest", { status: 200 }));
 
@@ -78,7 +78,7 @@ describe("ensureTunnelClient", () => {
   });
 
   it("selects the Windows amd64 archive and caches tunnel-client.exe", async () => {
-    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "sideband-tunnel-install-"));
+    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-install-"));
     tempDirs.push(cacheDir);
     const zip = new AdmZip();
     zip.addFile("release/tunnel-client.exe", Buffer.from("windows-binary"));

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
+import { RUNWIRE_NAME, RUNWIRE_VERSION } from "../meta.js";
 import type { ExecToolSpec } from "../provider/protocol.js";
 import { isRecord } from "../provider/protocol.js";
 import {
@@ -9,7 +10,7 @@ import {
 import {
   bootstrapToolJsonSchema,
   invokeBootstrap,
-  SIDEBAND_BOOTSTRAP_TOOL,
+  RUNWIRE_BOOTSTRAP_TOOL,
 } from "./bootstrap.js";
 import {
   collaborationToolJsonSchema,
@@ -19,15 +20,15 @@ import {
 import {z} from "zod";
 import {execToolDefinition} from "./exec-tool.js";
 import {invokeExecAndWait} from "./code-mode.js";
-import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
+import { RUNWIRE_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
   projectedToolJsonSchema,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
 import {
-  invokeSidebandSkillTool,
-  SIDEBAND_SKILL_TOOL_DEFINITIONS,
+  invokeRunwireSkillTool,
+  RUNWIRE_SKILL_TOOL_DEFINITIONS,
   skillToolJsonSchema,
   type NativeSkillTools,
 } from "./skill-tools.js";
@@ -99,7 +100,7 @@ export async function handleModernMcpRequest(
       resultType: "complete",
       supportedVersions: [MODERN_MCP_PROTOCOL_VERSION],
       capabilities: { tools: {} },
-      instructions: SIDEBAND_MCP_INSTRUCTIONS,
+      instructions: RUNWIRE_MCP_INSTRUCTIONS,
       ttlMs: 0,
       cacheScope: "private",
       _meta: serverMeta(),
@@ -115,7 +116,7 @@ export async function handleModernMcpRequest(
         modernBootstrapTool(),
         ...(context.projectedTools ?? []).map(modernProjectedTool),
         ...(context.collaborationTools ?? []).map(modernCollaborationTool),
-        ...(context.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS.map(modernSkillTool) : []),
+        ...(context.nativeSkillTools ? RUNWIRE_SKILL_TOOL_DEFINITIONS.map(modernSkillTool) : []),
         modernExecTool(context.execSpec),
       ],
       ttlMs: 0,
@@ -143,10 +144,10 @@ export async function handleModernMcpRequest(
       const projected = (context.projectedTools ?? []).find(tool => tool.name === name);
       const collaboration = (context.collaborationTools ?? []).find(tool => tool.name === name);
       const skillDefinition = context.nativeSkillTools
-        ? SIDEBAND_SKILL_TOOL_DEFINITIONS.find(tool => tool.name === name)
+        ? RUNWIRE_SKILL_TOOL_DEFINITIONS.find(tool => tool.name === name)
         : undefined;
       let result;
-      if (name === SIDEBAND_BOOTSTRAP_TOOL.name) {
+      if (name === RUNWIRE_BOOTSTRAP_TOOL.name) {
         result = await invokeBootstrap(context.bridge, context.nativeSkillTools);
       } else if (projected) {
         result = await invokeProjectedNativeTool(context.bridge, projected, args, {
@@ -157,7 +158,7 @@ export async function handleModernMcpRequest(
           signal: cancellation.signal,
         });
       } else if (skillDefinition && context.nativeSkillTools) {
-        result = await invokeSidebandSkillTool(
+        result = await invokeRunwireSkillTool(
           context.bridge,
           context.nativeSkillTools,
           skillDefinition.name,
@@ -203,15 +204,15 @@ export async function handleModernMcpRequest(
 
 function modernBootstrapTool(): Record<string, unknown> {
   return {
-    name: SIDEBAND_BOOTSTRAP_TOOL.name,
-    title: SIDEBAND_BOOTSTRAP_TOOL.title,
-    description: SIDEBAND_BOOTSTRAP_TOOL.description,
+    name: RUNWIRE_BOOTSTRAP_TOOL.name,
+    title: RUNWIRE_BOOTSTRAP_TOOL.title,
+    description: RUNWIRE_BOOTSTRAP_TOOL.description,
     inputSchema: bootstrapToolJsonSchema(),
   };
 }
 
 function modernSkillTool(
-  definition: (typeof SIDEBAND_SKILL_TOOL_DEFINITIONS)[number],
+  definition: (typeof RUNWIRE_SKILL_TOOL_DEFINITIONS)[number],
 ): Record<string, unknown> {
   return {
     name: definition.name,
@@ -248,8 +249,8 @@ function modernExecTool(execSpec: ExecToolSpec): Record<string, unknown> {
 function serverMeta(): Record<string, unknown> {
   return {
     "io.modelcontextprotocol/serverInfo": {
-      name: "sideband",
-      version: "0.0.0",
+      name: RUNWIRE_NAME,
+      version: RUNWIRE_VERSION,
     },
   };
 }

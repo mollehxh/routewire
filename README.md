@@ -1,126 +1,160 @@
-# Sideband
+# Runwire
 
-Sideband exposes the **live model-facing tool surface of a local Codex turn** as a local MCP server. ChatGPT can be the reasoning model while Codex executes its native tools.
+Runwire exposes the live model-facing tool surface of a local Codex turn as an
+MCP server. ChatGPT can remain the reasoning model while Codex executes the
+same local tools, skills, Browser/Computer Use runtimes, and subagent surface
+available to that turn.
+
+Runwire is local-first: the HTTP/MCP surface binds to loopback only unless you
+explicitly connect it through the OpenAI Secure MCP Tunnel.
+
+## Requirements
+
+- Node.js 22 or newer
+- A working Codex installation and authentication
+
+## Install
+
+```bash
+npm install --global runwire
+runwire
+```
+
+You can also run it without a global install:
+
+```bash
+npx runwire
+```
+
+Runwire starts the interactive TUI when attached to a terminal. In headless
+mode it prints the local MCP and provider endpoints.
+
+## Usage
+
+```text
+runwire [options]
+
+Options:
+  --host <host>           Loopback bind address (default: 127.0.0.1)
+  --port <port>           Local port, 0 chooses an available port (default: 0)
+  --model <model>         Codex model identity (default: gpt-5.6-sol)
+  --codex-home <path>     Override CODEX_HOME for the child Codex process
+  --tunnel-id <id>        OpenAI Secure MCP Tunnel ID
+  --tunnel-api-key-file <path>
+                           Runtime API key file
+  --tunnel-client <path>  Override the pinned auto-downloaded tunnel-client
+  --danger-full-access    Start Codex with no approvals or filesystem sandbox
+  -v, --version           Show the Runwire version
+  -h, --help              Show help
+```
+
+By default Runwire:
+
+- binds to `127.0.0.1` on an available port;
+- starts an ephemeral `codex exec` turn;
+- points that turn at Runwire's local Responses-compatible provider bridge;
+- preserves the user's normal Codex configuration and plugins;
+- discovers the live Codex tool surface instead of maintaining a separate copy;
+- exposes compatible native tools and skills through MCP;
+- keeps Codex sandbox and approval behavior intact unless
+  `--danger-full-access` is explicitly selected.
 
 ## ChatGPT Project Instructions
 
-For Codex-style agent behavior in ChatGPT, copy the contents of
-[`CHATGPT_PROJECT_INSTRUCTIONS.md`](./CHATGPT_PROJECT_INSTRUCTIONS.md) into the
-ChatGPT Project Instructions field. That file contains stable agent behavior;
-Sideband's MCP server instructions provide the current runtime preflight,
-bootstrap, skill-loading, and tool-selection workflow dynamically.
+For Codex-style agent behavior in ChatGPT, copy
+[`CHATGPT_PROJECT_INSTRUCTIONS.md`](./CHATGPT_PROJECT_INSTRUCTIONS.md) into
+the ChatGPT Project Instructions field. Runwire's MCP instructions add the
+runtime-specific bootstrap, skill-loading, and tool-selection workflow.
 
-## Development
+## OpenAI Secure MCP Tunnel
 
-```bash
-npm install
-npm run build
-npm test
-```
-
-Run Sideband from the project directory Codex should operate on:
+Set a tunnel ID to connect Runwire's local MCP surface through the official
+OpenAI tunnel client:
 
 ```bash
-npm run dev
-```
-
-By default Sideband:
-
-- binds to `127.0.0.1` on an available port;
-- starts a real ephemeral `codex exec` turn;
-- forces Codex model identity to `gpt-5.6-sol`;
-- overrides only `model_provider` for that child process, pointing it at Sideband's local Responses-compatible endpoint;
-- keeps the user's normal Codex config/plugins available;
-- waits for Codex to emit its real `functions.exec` declaration, then publishes that declaration as the MCP `exec` tool;
-- leaves Codex's normal permission/sandbox policy intact.
-
-The CLI prints the local MCP URL after Codex has exposed the tool surface.
-
-### OpenAI Secure MCP Tunnel
-
-When a tunnel ID is configured, the same Sideband process starts the official
-`tunnel-client`, waits for its local `/readyz` endpoint, and stops that child
-when Sideband shuts down:
-
-```bash
-export SIDEBAND_TUNNEL_ID=tunnel_...
+export RUNWIRE_TUNNEL_ID=tunnel_...
 export CONTROL_PLANE_API_KEY=<runtime-key-with-tunnel-permissions>
-npm run dev
+runwire
 ```
 
-The runtime API key is read by `tunnel-client` from the environment and is not
-placed in Sideband's child-process argv. A file-backed runtime key is also
-supported:
+A file-backed runtime key is also supported:
 
 ```bash
-npm run dev -- \
+runwire \
   --tunnel-id tunnel_... \
   --tunnel-api-key-file /path/to/runtime-api-key
 ```
 
-`tunnel-client` binds the OpenAI-hosted tunnel to the local Sideband `/mcp`
-endpoint. When `--tunnel-client` is not supplied, Sideband downloads the pinned
-official `v0.0.15` platform ZIP from OpenAI's public release storage on first
-use, verifies the pinned `SHA256SUMS.txt` digest and the selected archive digest,
-and caches only the verified executable in the user's cache directory. Without
-a tunnel ID, Sideband stays local-only and prints that the tunnel is not
-configured.
+If `--tunnel-client` is not supplied, Runwire downloads the pinned official
+tunnel client on first use, verifies the release checksums, and caches the
+verified executable under the user's Runwire cache directory.
 
-If Sideband itself is launched from a process that has a different `CODEX_HOME`
-(for example another Codex wrapper), point the child explicitly at the desired
-Codex installation state:
+For migration from the old project name, `SIDEBAND_TUNNEL_ID`,
+`SIDEBAND_TUNNEL_API_KEY_FILE`, `SIDEBAND_TUNNEL_CLIENT`, and
+`SIDEBAND_DEBUG` are still accepted when the corresponding `RUNWIRE_*`
+variable is not set.
 
-```bash
-npm run dev -- --codex-home ~/.codex
-```
+## Browser and Computer Use
 
-### Browser / Computer Use
+Runwire does not reimplement Browser Use or Computer Use. When the live Codex
+turn exposes `node_repl`, `cua_repl`, or compatible plugin-prefixed tools,
+Runwire projects those native tools through the MCP surface.
 
-Browser Use and Computer Use are not reimplemented in Sideband. If the live Codex turn exposes `node_repl`, `cua_repl`, or plugin-prefixed equivalents inside `functions.exec`, ChatGPT can invoke them through Sideband by writing the same Code Mode JavaScript Codex's own model would write.
-
-Some Browser/CUA runtimes require Codex full access. For explicit local testing only:
+Some native runtimes require broader Codex permissions. For explicit trusted
+local testing only:
 
 ```bash
-npm run dev -- --danger-full-access
+runwire --danger-full-access
 ```
 
-That passes `--dangerously-bypass-approvals-and-sandbox` to the child Codex process and therefore disables Codex approval prompts and sandboxing for native tool execution.
+That passes Codex's dangerous full-access mode to the child process and
+therefore disables its normal approval prompts and sandboxing.
 
-### Live smoke tests
+## Debugging
 
-The normal suite is hermetic. To verify the complete MCP → Sideband → live Codex → native tool → Sideband round-trip:
+Enable metadata-only provider diagnostics with:
 
 ```bash
-SIDEBAND_REAL_CODEX=1 npm test -- test/real-runtime-smoke.test.ts
+RUNWIRE_DEBUG=1 runwire
 ```
 
-That live smoke verifies all three paths in the same persistent Codex turn:
+The debug log reports provider request sequencing and response metadata. It
+does not intentionally log prompts, tool source code, tool output, or tunnel
+credentials.
 
-- native `exec_command` execution;
-- the real `node_repl` Browser runtime discovered from `ALL_TOOLS`;
-- the real `cua_repl` Computer Use runtime discovered from `ALL_TOOLS`.
-
-The test resolves the runtime tool names dynamically instead of assuming a fixed MCP namespace.
-
-### Debugging provider traffic
-
-If a live Codex turn fails, enable metadata-only provider diagnostics:
+## Development
 
 ```bash
-SIDEBAND_DEBUG=1 npm run dev
+git clone https://github.com/mollehxh/runwire.git
+cd runwire
+npm ci
+npm run typecheck
+npm test
+npm run build
 ```
 
-PowerShell:
+Run the development CLI from the project directory Codex should operate on:
 
-```powershell
-$env:SIDEBAND_DEBUG = "1"
-node .\dist\cli.js --codex-home "$env:USERPROFILE\.codex" --danger-full-access
+```bash
+npm run dev
 ```
 
-The debug log prints provider request sequence numbers, request kind, input item
-types, and Sideband reply kind. It does not log prompts, `exec` source code, tool
-outputs, or tunnel credentials.
+The normal test suite is hermetic. An opt-in live smoke test is available for
+a configured Codex installation:
 
-Sideband serves both the legacy MCP handshake used by current local SDK clients
-and the stateless MCP `2026-07-28` HTTP surface used by current ChatGPT tunnel
-traffic (`server/discover`, `tools/list`, and `tools/call`).
+```bash
+RUNWIRE_REAL_CODEX=1 npm test -- test/real-runtime-smoke.test.ts
+```
+
+## Security
+
+See [`SECURITY.md`](./SECURITY.md). Do not commit Codex credentials, tunnel
+credentials, local settings, or diagnostic artifacts containing private data.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+## License
+
+MIT © 2026 mollehxh

@@ -4,28 +4,31 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
 import { parseCliOptions } from "./cli-options.js";
+import { runwireEnv } from "./env.js";
+import { RUNWIRE_VERSION } from "./meta.js";
 import { loadCodexModelCatalog } from "./model-catalog.js";
-import { startSideband, type SidebandRuntime } from "./runtime.js";
+import { startRunwire, type RunwireRuntime } from "./runtime.js";
 import { RunwireTui } from "./tui.js";
 import { apiKeyPath, hasStoredApiKey, type RunwireSettings } from "./tui-settings.js";
 
-const HELP = `sideband
+const HELP = `runwire
 
 Expose the live Codex model-facing tool surface as a local MCP server.
 
 Usage:
-  sideband [options]
+  runwire [options]
 
 Options:
   --host <host>           Loopback bind address (default: 127.0.0.1)
   --port <port>           Local port, 0 chooses an available port (default: 0)
   --model <model>         Codex model identity (default: gpt-5.6-sol)
   --codex-home <path>     Override CODEX_HOME for the child Codex process
-  --tunnel-id <id>        OpenAI Secure MCP Tunnel ID (or SIDEBAND_TUNNEL_ID)
+  --tunnel-id <id>        OpenAI Secure MCP Tunnel ID (or RUNWIRE_TUNNEL_ID)
   --tunnel-api-key-file <path>
-                           Runtime API key file (or SIDEBAND_TUNNEL_API_KEY_FILE)
+                           Runtime API key file (or RUNWIRE_TUNNEL_API_KEY_FILE)
   --tunnel-client <path>  Override the pinned auto-downloaded tunnel-client
   --danger-full-access    Start Codex with full filesystem access and no approvals
+  -v, --version           Show the Runwire version
   -h, --help              Show this help
 `;
 
@@ -35,6 +38,10 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.includes("-h") || args.includes("--help")) {
     process.stdout.write(HELP);
+    return;
+  }
+  if (args.includes("-v") || args.includes("--version")) {
+    process.stdout.write(`${RUNWIRE_VERSION}\n`);
     return;
   }
 
@@ -48,13 +55,15 @@ async function main(): Promise<void> {
 
 export async function runInteractive(options: ReturnType<typeof parseCliOptions>): Promise<void> {
   const model = options.model ?? "gpt-5.6-sol";
-  const tunnelId = options.tunnelId ?? process.env.SIDEBAND_TUNNEL_ID;
-  const tunnelApiKeyFile = options.tunnelApiKeyFile ?? process.env.SIDEBAND_TUNNEL_API_KEY_FILE;
-  const tunnelClient = options.tunnelClient ?? process.env.SIDEBAND_TUNNEL_CLIENT;
+  const tunnelId = options.tunnelId ?? runwireEnv("RUNWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
+  const tunnelApiKeyFile =
+    options.tunnelApiKeyFile ?? runwireEnv("RUNWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
+  const tunnelClient =
+    options.tunnelClient ?? runwireEnv("RUNWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
   const externalApiKey = Boolean(process.env.CONTROL_PLANE_API_KEY || tunnelApiKeyFile);
   const modelCatalog = loadCodexModelCatalog(options.codexHome);
 
-  let runtime: SidebandRuntime | undefined;
+  let runtime: RunwireRuntime | undefined;
   let closingRuntime = false;
   let quitting = false;
   let quitResolve: (() => void) | undefined;
@@ -99,7 +108,7 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
         activeTui = undefined;
         quitResolve?.();
       }
-    }).catch(error => process.stderr.write(`[sideband] ${errorMessage(error)}\n`)).then(() => undefined);
+    }).catch(error => process.stderr.write(`[runwire] ${errorMessage(error)}\n`)).then(() => undefined);
   };
 
   async function launch(settings: RunwireSettings): Promise<void> {
@@ -110,7 +119,7 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
 
     const storedKeyFile = !externalApiKey && hasStoredApiKey() ? apiKeyPath() : undefined;
     const currentModelCatalog = loadCodexModelCatalog(options.codexHome);
-    const next = await startSideband({
+    const next = await startRunwire({
       cwd: process.cwd(),
       host: options.host,
       port: options.port,
@@ -177,10 +186,12 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
 }
 
 async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise<void> {
-  const tunnelId = options.tunnelId ?? process.env.SIDEBAND_TUNNEL_ID;
-  const tunnelApiKeyFile = options.tunnelApiKeyFile ?? process.env.SIDEBAND_TUNNEL_API_KEY_FILE;
-  const tunnelClient = options.tunnelClient ?? process.env.SIDEBAND_TUNNEL_CLIENT;
-  const runtime = await startSideband({
+  const tunnelId = options.tunnelId ?? runwireEnv("RUNWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
+  const tunnelApiKeyFile =
+    options.tunnelApiKeyFile ?? runwireEnv("RUNWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
+  const tunnelClient =
+    options.tunnelClient ?? runwireEnv("RUNWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
+  const runtime = await startRunwire({
     cwd: process.cwd(),
     host: options.host,
     port: options.port,
@@ -193,14 +204,14 @@ async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise
       : undefined,
   });
 
-  process.stdout.write(`[sideband] project: ${runtime.cwd}\n`);
-  process.stdout.write(`[sideband] model: ${runtime.model}\n`);
-  process.stdout.write(`[sideband] MCP: ${runtime.mcpUrl}\n`);
-  process.stdout.write(`[sideband] provider: ${runtime.providerBaseUrl}\n`);
+  process.stdout.write(`[runwire] project: ${runtime.cwd}\n`);
+  process.stdout.write(`[runwire] model: ${runtime.model}\n`);
+  process.stdout.write(`[runwire] MCP: ${runtime.mcpUrl}\n`);
+  process.stdout.write(`[runwire] provider: ${runtime.providerBaseUrl}\n`);
   process.stdout.write(
     runtime.tunnelHealthUrl
-      ? `[sideband] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`
-      : "[sideband] Secure MCP Tunnel: not configured\n",
+      ? `[runwire] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`
+      : "[runwire] Secure MCP Tunnel: not configured\n",
   );
 
   let stopping = false;
@@ -237,6 +248,6 @@ function errorMessage(error: unknown): string {
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main().catch(error => {
   activeTui?.stop();
   activeTui = undefined;
-  process.stderr.write(`[sideband] ${errorMessage(error)}\n`);
+  process.stderr.write(`[runwire] ${errorMessage(error)}\n`);
   process.exitCode = 1;
 });

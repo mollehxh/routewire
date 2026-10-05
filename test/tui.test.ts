@@ -21,10 +21,10 @@ describe("Runwire Activity classification", () => {
   it("classifies a projected exec_command as shell activity with the actual command", () => {
     const activity = describeActivityEvent({
       type: "call_started",
-      callId: "sideband-1",
+      callId: "runwire-1",
       namespace: "functions",
       name: "exec",
-      input: 'const __sidebandNativeResult = await tools["exec_command"]({"cmd":"npm test","workdir":"/repo"});',
+      input: 'const __runwireNativeResult = await tools["exec_command"]({"cmd":"npm test","workdir":"/repo"});',
       startedAt: 1,
     });
     expect(activity).toMatchObject({kind: "shell", target: "npm test", detail: "in /repo"});
@@ -33,10 +33,10 @@ describe("Runwire Activity classification", () => {
   it("classifies read-like shell commands separately", () => {
     const activity = describeActivityEvent({
       type: "call_started",
-      callId: "sideband-read",
+      callId: "runwire-read",
       namespace: "functions",
       name: "exec",
-      input: 'const __sidebandNativeResult = await tools["exec_command"]({"cmd":"sed -n \'1,120p\' src/tui.ts","workdir":"/repo"});',
+      input: 'const __runwireNativeResult = await tools["exec_command"]({"cmd":"sed -n \'1,120p\' src/tui.ts","workdir":"/repo"});',
       startedAt: 1,
     });
     expect(activity).toMatchObject({kind: "read", target: "sed -n '1,120p' src/tui.ts"});
@@ -46,10 +46,10 @@ describe("Runwire Activity classification", () => {
     const patch = "*** Begin Patch\n*** Update File: src/tui.ts\n*** Update File: test/tui.test.ts\n*** End Patch";
     const activity = describeActivityEvent({
       type: "call_started",
-      callId: "sideband-2",
+      callId: "runwire-2",
       namespace: "functions",
       name: "exec",
-      input: `const __sidebandNativeResult = await tools["apply_patch"](${JSON.stringify(patch)});`,
+      input: `const __runwireNativeResult = await tools["apply_patch"](${JSON.stringify(patch)});`,
       startedAt: 1,
     });
     expect(activity).toMatchObject({
@@ -65,7 +65,7 @@ describe("Runwire Activity classification", () => {
       callId: "internal",
       namespace: "functions",
       name: "exec",
-      input: "const __sidebandInventory = ALL_TOOLS; text(__sidebandInventory);",
+      input: "const __runwireInventory = ALL_TOOLS; text(__runwireInventory);",
       startedAt: 1,
     })).toBeUndefined();
   });

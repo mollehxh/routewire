@@ -1,14 +1,14 @@
 import type { CodexBridgeEvent } from "./bridge.js";
 
-export type SidebandRuntimeComponent = "mcp" | "codex" | "tunnel";
-export type SidebandRuntimeComponentState = "starting" | "ready" | "stopped" | "error";
+export type RunwireRuntimeComponent = "mcp" | "codex" | "tunnel";
+export type RunwireRuntimeComponentState = "starting" | "ready" | "stopped" | "error";
 
-export type SidebandRuntimeEvent =
+export type RunwireRuntimeEvent =
   | CodexBridgeEvent
   | {
       type: "component";
-      component: SidebandRuntimeComponent;
-      state: SidebandRuntimeComponentState;
+      component: RunwireRuntimeComponent;
+      state: RunwireRuntimeComponentState;
       detail?: string;
     };
 

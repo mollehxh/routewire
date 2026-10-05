@@ -6,6 +6,7 @@ import spawn from "cross-spawn";
 import { z, type ZodType } from "zod";
 
 import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
+import { RUNWIRE_NAME, RUNWIRE_TITLE, RUNWIRE_VERSION } from "../meta.js";
 import type { BridgeCallResult } from "../provider/protocol.js";
 
 export type NativeSkillTools =
@@ -25,14 +26,14 @@ export interface CodexSkillSummary {
   description: string;
 }
 
-export interface SidebandSkillToolDefinition {
+export interface RunwireSkillToolDefinition {
   name: "skills" | "get_skill";
   title: string;
   description: string;
   inputSchema: ZodType;
 }
 
-export interface SidebandSkillToolOptions {
+export interface RunwireSkillToolOptions {
   onEvent?: (event: CodexBridgeEvent) => void;
 }
 
@@ -53,7 +54,7 @@ const getSkillInputSchema = z.object({
     .describe("Exact enabled skill names returned by the skills tool."),
 });
 
-export const SIDEBAND_SKILL_TOOL_DEFINITIONS: SidebandSkillToolDefinition[] = [
+export const RUNWIRE_SKILL_TOOL_DEFINITIONS: RunwireSkillToolDefinition[] = [
   {
     name: "skills",
     title: "Codex skills",
@@ -104,12 +105,12 @@ export async function discoverNativeSkillTools(
   return undefined;
 }
 
-export async function invokeSidebandSkillTool(
+export async function invokeRunwireSkillTool(
   bridge: CodexTurnBridge,
   nativeTools: NativeSkillTools,
   name: "skills" | "get_skill",
   arguments_: unknown,
-  options: SidebandSkillToolOptions = {},
+  options: RunwireSkillToolOptions = {},
 ): Promise<BridgeCallResult> {
   if (name === "skills") {
     return invokeSkills(bridge, nativeTools, skillsInputSchema.parse(arguments_));
@@ -117,7 +118,7 @@ export async function invokeSidebandSkillTool(
 
   const args = getSkillInputSchema.parse(arguments_);
   const startedAt = Date.now();
-  const callId = `sideband-skill-${++skillActivityCounter}`;
+  const callId = `runwire-skill-${++skillActivityCounter}`;
   options.onEvent?.({
     type: "call_started",
     callId,
@@ -304,7 +305,7 @@ async function appServerSkillsList(
 
   try {
     await request(1, "initialize", {
-      clientInfo: { name: "sideband", title: "Runwire", version: "0.0.0" },
+      clientInfo: { name: RUNWIRE_NAME, title: RUNWIRE_TITLE, version: RUNWIRE_VERSION },
       capabilities: { experimentalApi: true },
     });
     stdin.write(`${JSON.stringify({ method: "initialized" })}\n`);
@@ -502,7 +503,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function skillToolJsonSchema(
-  definition: SidebandSkillToolDefinition,
+  definition: RunwireSkillToolDefinition,
 ): Record<string, unknown> {
   const schema = z.toJSONSchema(definition.inputSchema) as Record<string, unknown>;
   const { $schema: _schema, ...withoutDialect } = schema;

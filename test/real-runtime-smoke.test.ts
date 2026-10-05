@@ -3,29 +3,29 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { SIDEBAND_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
-import { startSideband } from "../src/runtime.js";
+import { RUNWIRE_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
+import { startRunwire } from "../src/runtime.js";
 
-const runRealCodex = process.env.SIDEBAND_REAL_CODEX === "1";
+const runRealCodex = process.env.RUNWIRE_REAL_CODEX === "1";
 
 describe.skipIf(!runRealCodex)("real Codex runtime", () => {
   it(
     "round-trips an MCP exec call through a live Codex turn without Codex inference",
     async () => {
-      const runtime = await startSideband({
+      const runtime = await startRunwire({
         cwd: process.cwd(),
         model: "gpt-5.6-sol",
         codexHome:
-          process.env.SIDEBAND_REAL_CODEX_HOME ?? path.join(os.homedir(), ".codex"),
+          process.env.RUNWIRE_REAL_CODEX_HOME ?? path.join(os.homedir(), ".codex"),
         dangerFullAccess: true,
         quietCodex: true,
       });
 
-      const client = new Client({ name: "sideband-real-smoke", version: "0.0.0" });
+      const client = new Client({ name: "runwire-real-smoke", version: "0.0.0" });
       try {
         await client.connect(new StreamableHTTPClientTransport(new URL(runtime.mcpUrl)));
 
-        expect(client.getInstructions()).toBe(SIDEBAND_MCP_INSTRUCTIONS);
+        expect(client.getInstructions()).toBe(RUNWIRE_MCP_INSTRUCTIONS);
         expect(client.getInstructions()).toContain("$skills");
 
         const listed = await client.listTools();
@@ -97,13 +97,13 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
 
         const directExec = await client.callTool({
           name: "exec_command",
-          arguments: { cmd: "printf SIDEBAND_DIRECT_EXEC_OK", login: false },
+          arguments: { cmd: "printf RUNWIRE_DIRECT_EXEC_OK", login: false },
         });
         const directExecText = directExec.content
           .filter(item => item.type === "text")
           .map(item => item.text)
           .join("\n");
-        expect(directExecText).toContain("SIDEBAND_DIRECT_EXEC_OK");
+        expect(directExecText).toContain("RUNWIRE_DIRECT_EXEC_OK");
         expect(directExecText).not.toContain("Script completed");
 
         const policy = await client.callTool({
@@ -112,7 +112,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
             code: [
               "const modelTools = ALL_TOOLS.filter(x => /spawn_agent|spawn_session|run_model|collaboration__/i.test(x.name)).map(x => x.name);",
               "let blocked = false;",
-              "try { void tools.mcp__sideband_probe__collaboration__spawn_agent; } catch (error) { blocked = String(error).includes('Blocked model-spawning tool'); }",
+              "try { void tools.mcp__runwire_probe__collaboration__spawn_agent; } catch (error) { blocked = String(error).includes('Blocked model-spawning tool'); }",
               "text({ modelTools, blocked, execAvailable: typeof tools.exec_command === 'function' });",
             ].join("\n"),
           },
@@ -130,7 +130,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           arguments: {
             code: [
               "const result = await tools.exec_command({",
-              '  cmd: "printf SIDEBAND_REAL_RUNTIME_OK",',
+              '  cmd: "printf RUNWIRE_REAL_RUNTIME_OK",',
               "  login: false",
               "});",
               "text(result);",
@@ -142,7 +142,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
           .filter(item => item.type === "text")
           .map(item => item.text)
           .join("\n");
-        expect(text).toContain("SIDEBAND_REAL_RUNTIME_OK");
+        expect(text).toContain("RUNWIRE_REAL_RUNTIME_OK");
 
         const discovery = await client.callTool({
           name: "exec",
@@ -168,22 +168,22 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
         const browser = await client.callTool({
           name: "mcp__node_repl__js",
           arguments: {
-            code: "nodeRepl.write('SIDEBAND_BROWSER_OK')",
-            title: "Sideband Browser smoke",
+            code: "nodeRepl.write('RUNWIRE_BROWSER_OK')",
+            title: "Runwire Browser smoke",
           },
         });
         const browserText = browser.content
           .filter(item => item.type === "text")
           .map(item => item.text)
           .join("\n");
-        expect(browserText).toContain("SIDEBAND_BROWSER_OK");
+        expect(browserText).toContain("RUNWIRE_BROWSER_OK");
         expect(browserText).not.toContain("Script completed");
 
         const cua = await client.callTool({
           name: cuaToolName!,
           arguments: {
             code: "await cua.getState();",
-            title: "Sideband CUA smoke",
+            title: "Runwire CUA smoke",
             timeout_ms: 10000,
           },
         });

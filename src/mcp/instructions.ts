@@ -1,4 +1,4 @@
-export const SIDEBAND_MCP_INSTRUCTIONS = `This server exposes one persistent live Codex runtime and its native tool surface.
+export const RUNWIRE_MCP_INSTRUCTIONS = `This server exposes one persistent live Codex runtime and its native tool surface.
 
 Before ordinary substantive work in a conversation, call \`bootstrap\` once if the current Codex context has not already been loaded. It returns the current runtime/project context, applicable AGENTS.md instructions, permissions, and the native Codex skill catalog. Reuse that context for later turns unless the runtime was restarted or the context is known to have changed.
 

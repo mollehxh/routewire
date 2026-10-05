@@ -16,7 +16,7 @@ import { handleProviderHttpRequest } from "./provider/http.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 import type { ReasoningEffort } from "./model-catalog.js";
 
-export interface SidebandHttpSurfaceOptions {
+export interface RunwireHttpSurfaceOptions {
   bridge: CodexTurnBridge;
   host?: string;
   port?: number;
@@ -25,7 +25,7 @@ export interface SidebandHttpSurfaceOptions {
   onEvent?: (event: CodexBridgeEvent) => void;
 }
 
-export class SidebandHttpSurface {
+export class RunwireHttpSurface {
   readonly #bridge: CodexTurnBridge;
   readonly #host: string;
   readonly #requestedPort: number;
@@ -42,11 +42,11 @@ export class SidebandHttpSurface {
   #refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
   #closePromise?: Promise<void>;
 
-  constructor(options: SidebandHttpSurfaceOptions) {
+  constructor(options: RunwireHttpSurfaceOptions) {
     this.#bridge = options.bridge;
     this.#host = options.host ?? "127.0.0.1";
     if (!isLoopbackHost(this.#host)) {
-      throw new Error(`Sideband only binds loopback addresses; received host ${this.#host}`);
+      throw new Error(`Runwire only binds loopback addresses; received host ${this.#host}`);
     }
     this.#requestedPort = options.port ?? 0;
     this.#allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
@@ -63,7 +63,7 @@ export class SidebandHttpSurface {
   }
 
   get origin(): string {
-    if (this.#port === undefined) throw new Error("Sideband HTTP surface is not started");
+    if (this.#port === undefined) throw new Error("Runwire HTTP surface is not started");
     return `http://${formatHostForUrl(this.#host)}:${this.#port}`;
   }
 
@@ -88,7 +88,7 @@ export class SidebandHttpSurface {
   }
 
   async start(): Promise<void> {
-    if (this.#server) throw new Error("Sideband HTTP surface is already started");
+    if (this.#server) throw new Error("Runwire HTTP surface is already started");
     if (this.#closePromise) {
       await this.#closePromise.catch(() => undefined);
       this.#closePromise = undefined;
@@ -167,7 +167,7 @@ export class SidebandHttpSurface {
     const address = server.address();
     if (!address || typeof address === "string") {
       await this.close();
-      throw new Error("Could not determine Sideband listening address");
+      throw new Error("Could not determine Runwire listening address");
     }
     this.#port = address.port;
   }

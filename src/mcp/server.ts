@@ -2,30 +2,31 @@ import { McpServer, type CallToolResult, type Tool, type ServerContext } from "@
 import { z } from "zod";
 
 import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
+import { RUNWIRE_NAME, RUNWIRE_VERSION } from "../meta.js";
 import { type ExecToolSpec } from "../provider/protocol.js";
 import {
   wrapExecCode,
 } from "../tool-policy.js";
 import {execToolDefinition} from "./exec-tool.js";
 import {invokeExecAndWait} from "./code-mode.js";
-import { invokeBootstrap, SIDEBAND_BOOTSTRAP_TOOL } from "./bootstrap.js";
+import { invokeBootstrap, RUNWIRE_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import {
   invokeCollaborationTool,
   type CollaborationTool,
 } from "./collaboration-tools.js";
-import { SIDEBAND_MCP_INSTRUCTIONS } from "./instructions.js";
+import { RUNWIRE_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
   projectedToolsFingerprint,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
 import {
-  invokeSidebandSkillTool,
-  SIDEBAND_SKILL_TOOL_DEFINITIONS,
+  invokeRunwireSkillTool,
+  RUNWIRE_SKILL_TOOL_DEFINITIONS,
   type NativeSkillTools,
 } from "./skill-tools.js";
 
-export interface CreateSidebandMcpServerOptions {
+export interface CreateRunwireMcpServerOptions {
   bridge: CodexTurnBridge;
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
@@ -35,18 +36,18 @@ export interface CreateSidebandMcpServerOptions {
   refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
 }
 
-export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions): McpServer {
+export function createRunwireMcpServer(options: CreateRunwireMcpServerOptions): McpServer {
   const server = new McpServer(
-    { name: "sideband", version: "0.0.0" },
-    { instructions: SIDEBAND_MCP_INSTRUCTIONS },
+    { name: RUNWIRE_NAME, version: RUNWIRE_VERSION },
+    { instructions: RUNWIRE_MCP_INSTRUCTIONS },
   );
 
   server.registerTool(
-    SIDEBAND_BOOTSTRAP_TOOL.name,
+    RUNWIRE_BOOTSTRAP_TOOL.name,
     {
-      title: SIDEBAND_BOOTSTRAP_TOOL.title,
-      description: SIDEBAND_BOOTSTRAP_TOOL.description,
-      inputSchema: SIDEBAND_BOOTSTRAP_TOOL.inputSchema,
+      title: RUNWIRE_BOOTSTRAP_TOOL.title,
+      description: RUNWIRE_BOOTSTRAP_TOOL.description,
+      inputSchema: RUNWIRE_BOOTSTRAP_TOOL.inputSchema,
     },
     async (): Promise<CallToolResult> => {
       try {
@@ -112,7 +113,7 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
   }
 
   if (options.nativeSkillTools) {
-    for (const definition of SIDEBAND_SKILL_TOOL_DEFINITIONS) {
+    for (const definition of RUNWIRE_SKILL_TOOL_DEFINITIONS) {
       server.registerTool(
         definition.name,
         {
@@ -122,7 +123,7 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
         },
         async (arguments_: unknown): Promise<CallToolResult> => {
           try {
-            const result = await invokeSidebandSkillTool(
+            const result = await invokeRunwireSkillTool(
               options.bridge,
               options.nativeSkillTools!,
               definition.name,
@@ -156,7 +157,7 @@ export function createSidebandMcpServer(options: CreateSidebandMcpServerOptions)
   if (options.refreshProjectedTools) {
     server.server.setRequestHandler("tools/list", async () => {
       updateProjected(await options.refreshProjectedTools!());
-      return {tools: listSidebandTools(options)};
+      return {tools: listRunwireTools(options)};
     });
   }
   return server;
@@ -167,16 +168,16 @@ function errorMessage(error: unknown): string {
 }
 
 const projectedUpdaters = new WeakMap<McpServer, (tools: ProjectedNativeTool[]) => void>();
-export function updateSidebandProjectedTools(server: McpServer, tools: ProjectedNativeTool[]): void {
+export function updateRunwireProjectedTools(server: McpServer, tools: ProjectedNativeTool[]): void {
   projectedUpdaters.get(server)?.(tools);
 }
 
-function listSidebandTools(options: CreateSidebandMcpServerOptions): Tool[] {
+function listRunwireTools(options: CreateRunwireMcpServerOptions): Tool[] {
   const definitions = [
-    SIDEBAND_BOOTSTRAP_TOOL,
+    RUNWIRE_BOOTSTRAP_TOOL,
     ...(options.projectedTools ?? []),
     ...(options.collaborationTools ?? []),
-    ...(options.nativeSkillTools ? SIDEBAND_SKILL_TOOL_DEFINITIONS : []),
+    ...(options.nativeSkillTools ? RUNWIRE_SKILL_TOOL_DEFINITIONS : []),
     execToolDefinition(options.execSpec),
   ];
   return definitions.map(({name,title,description,inputSchema}) => ({

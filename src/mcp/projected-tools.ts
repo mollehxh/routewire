@@ -196,9 +196,9 @@ export function selectProjectedNativeTools(
   });
 }
 
-const INVENTORY_START = "__SIDEBAND_NATIVE_INVENTORY_START__";
-const INVENTORY_END = "__SIDEBAND_NATIVE_INVENTORY_END__";
-const PROJECTED_ERROR_MARKER = "__SIDEBAND_PROJECTED_NATIVE_ERROR__";
+const INVENTORY_START = "__RUNWIRE_NATIVE_INVENTORY_START__";
+const INVENTORY_END = "__RUNWIRE_NATIVE_INVENTORY_END__";
+const PROJECTED_ERROR_MARKER = "__RUNWIRE_PROJECTED_NATIVE_ERROR__";
 
 export async function discoverProjectedNativeTools(
   bridge: CodexTurnBridge,
@@ -227,7 +227,7 @@ async function discoverCandidateInventory(
   bridge: CodexTurnBridge,
 ): Promise<NativeToolMetadata[]> {
   const code = `
-const __sidebandExactNames = new Set(${JSON.stringify([
+const __runwireExactNames = new Set(${JSON.stringify([
     "exec_command",
     "write_stdin",
     "apply_patch",
@@ -236,16 +236,16 @@ const __sidebandExactNames = new Set(${JSON.stringify([
     "mcp__node_repl__js_reset",
     "mcp__node_repl__js_add_node_module_dir",
   ])});
-const __sidebandInventory = ALL_TOOLS
+const __runwireInventory = ALL_TOOLS
   .filter(tool => {
     const name = String(tool?.name ?? "");
-    return __sidebandExactNames.has(name) || /cua_repl__(?:js|js_reset|js_add_node_module_dir)$/i.test(name);
+    return __runwireExactNames.has(name) || /cua_repl__(?:js|js_reset|js_add_node_module_dir)$/i.test(name);
   })
   .map(tool => ({
   name: String(tool?.name ?? ""),
   description: String(tool?.description ?? ""),
 }));
-text(${JSON.stringify(INVENTORY_START)} + JSON.stringify(__sidebandInventory) + ${JSON.stringify(INVENTORY_END)});
+text(${JSON.stringify(INVENTORY_START)} + JSON.stringify(__runwireInventory) + ${JSON.stringify(INVENTORY_END)});
 `;
   const result = await invokeExecAndWait(bridge, wrapExecCode(code));
   return parseInventory(result);
@@ -302,32 +302,32 @@ export async function invokeProjectedNativeTool(
   const invocation = `tools[${JSON.stringify(tool.nativeName)}](${JSON.stringify(nativeArguments)})`;
 
   const code = `
-const __sidebandNativeResult = await ${invocation};
+const __runwireNativeResult = await ${invocation};
 if (
-  __sidebandNativeResult &&
-  typeof __sidebandNativeResult === "object" &&
-  Array.isArray(__sidebandNativeResult.content)
+  __runwireNativeResult &&
+  typeof __runwireNativeResult === "object" &&
+  Array.isArray(__runwireNativeResult.content)
 ) {
-  for (const __sidebandItem of __sidebandNativeResult.content) {
-    if (__sidebandItem?.type === "text" && typeof __sidebandItem.text === "string") {
-      text(__sidebandItem.text);
-    } else if (__sidebandItem?.type === "image") {
-      image(__sidebandItem);
+  for (const __runwireItem of __runwireNativeResult.content) {
+    if (__runwireItem?.type === "text" && typeof __runwireItem.text === "string") {
+      text(__runwireItem.text);
+    } else if (__runwireItem?.type === "image") {
+      image(__runwireItem);
     } else {
-      text(__sidebandItem);
+      text(__runwireItem);
     }
   }
-  if (__sidebandNativeResult.isError === true) {
+  if (__runwireNativeResult.isError === true) {
     text(${JSON.stringify(PROJECTED_ERROR_MARKER)});
   }
 } else if (
-  __sidebandNativeResult &&
-  typeof __sidebandNativeResult === "object" &&
-  typeof __sidebandNativeResult.image_url === "string"
+  __runwireNativeResult &&
+  typeof __runwireNativeResult === "object" &&
+  typeof __runwireNativeResult.image_url === "string"
 ) {
-  image(__sidebandNativeResult.image_url, __sidebandNativeResult.detail ?? "high");
+  image(__runwireNativeResult.image_url, __runwireNativeResult.detail ?? "high");
 } else {
-  text(__sidebandNativeResult);
+  text(__runwireNativeResult);
 }
 `;
   return cleanProjectedNativeResult(

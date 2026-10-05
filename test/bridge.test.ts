@@ -221,7 +221,7 @@ describe("CodexTurnBridge", () => {
     expect(retryReplies).toHaveLength(1);
     expect(retryReplies[0]).toMatchObject({
       kind: "tool_call",
-      callId: "sideband-1",
+      callId: "runwire-1",
     });
   });
 

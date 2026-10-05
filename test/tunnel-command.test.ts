@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import { buildTunnelClientArgs } from "../src/tunnel/command.js";
 
 describe("buildTunnelClientArgs", () => {
-  it("binds the official tunnel client to Sideband MCP without putting raw secrets in argv", () => {
+  it("binds the official tunnel client to Runwire MCP without putting raw secrets in argv", () => {
     const args = buildTunnelClientArgs({
       tunnelId: "tunnel_0123456789abcdef",
       mcpUrl: "http://127.0.0.1:4321/mcp",
-      healthUrlFile: "/tmp/sideband-health.url",
+      healthUrlFile: "/tmp/runwire-health.url",
       apiKeyFile: "/tmp/runtime-api-key",
     });
 
@@ -24,7 +24,7 @@ describe("buildTunnelClientArgs", () => {
       "--health.listen-addr",
       "127.0.0.1:0",
       "--health.url-file",
-      "/tmp/sideband-health.url",
+      "/tmp/runwire-health.url",
       "--log.format",
       "struct-text",
       "--log.level",

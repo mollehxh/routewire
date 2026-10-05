@@ -29,7 +29,7 @@ describe("projected Codex native tools", () => {
 
   it("discovers CUA on a later refresh and exposes native wait outside nested ALL_TOOLS", async () => {
     let cycle=0;
-    const bridge = {functionTools:()=>[{name:"wait",description:"Wait native cell"}],invokeExec:async()=>({isError:false,content:[{type:"text",text:`__SIDEBAND_NATIVE_INVENTORY_START__${JSON.stringify(++cycle>=3?[{name:"mcp__cua_repl__js",description:"CUA"}]:[])}__SIDEBAND_NATIVE_INVENTORY_END__`}]})} as unknown as CodexTurnBridge;
+    const bridge = {functionTools:()=>[{name:"wait",description:"Wait native cell"}],invokeExec:async()=>({isError:false,content:[{type:"text",text:`__RUNWIRE_NATIVE_INVENTORY_START__${JSON.stringify(++cycle>=3?[{name:"mcp__cua_repl__js",description:"CUA"}]:[])}__RUNWIRE_NATIVE_INVENTORY_END__`}]})} as unknown as CodexTurnBridge;
     expect((await discoverProjectedNativeTools(bridge)).map(tool=>tool.name)).toContain("wait");
     expect((await discoverProjectedNativeTools(bridge)).map(tool=>tool.name)).toContain("mcp__cua_repl__js");
   });

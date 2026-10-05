@@ -11,7 +11,7 @@ export interface BuildCodexArgsOptions {
 
 export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
   const providerConfig = [
-    'name="Sideband"',
+    'name="Runwire"',
     `base_url="${options.providerBaseUrl}"`,
     'wire_api="responses"',
     "requires_openai_auth=true",
@@ -26,9 +26,9 @@ export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
     "-m",
     options.model,
     "-c",
-    'model_provider="sideband"',
+    'model_provider="runwire"',
     "-c",
-    `model_providers.sideband={${providerConfig}}`,
+    `model_providers.runwire={${providerConfig}}`,
     "-c",
     "analytics.enabled=false",
     "-c",

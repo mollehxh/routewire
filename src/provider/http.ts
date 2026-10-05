@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { CodexTurnBridge } from "../bridge.js";
+import { runwireEnvFlag } from "../env.js";
 import {
   isAllowedChildRequest,
   proxyChildRequest,
@@ -38,7 +39,7 @@ export async function handleProviderHttpRequest(
   const requestId = ++providerRequestSequence;
   if (providerDebugEnabled()) {
     process.stderr.write(
-      `[sideband] provider request #${requestId}: ${JSON.stringify(providerRequestSummary(body))}\n`,
+      `[runwire] provider request #${requestId}: ${JSON.stringify(providerRequestSummary(body))}\n`,
     );
   }
 
@@ -56,7 +57,7 @@ export async function handleProviderHttpRequest(
     } catch (error) {
       const message = errorMessage(error);
       logProviderError(body, message);
-      sendFailedStream(res, "sideband_luna_proxy_error", message);
+      sendFailedStream(res, "runwire_luna_proxy_error", message);
     }
     return true;
   }
@@ -67,9 +68,9 @@ export async function handleProviderHttpRequest(
   }
 
   if (isRecord(body) && body.model !== bridge.model) {
-    const message = `Unsupported Sideband model request: ${String(body.model)}`;
+    const message = `Unsupported Runwire model request: ${String(body.model)}`;
     logProviderError(body, message);
-    sendFailedStream(res, "sideband_model_not_allowed", message);
+    sendFailedStream(res, "runwire_model_not_allowed", message);
     return true;
   }
 
@@ -81,7 +82,7 @@ export async function handleProviderHttpRequest(
   res.flushHeaders();
 
   const keepAlive = setInterval(() => {
-    if (!res.writableEnded) res.write(": sideband keepalive\n\n");
+    if (!res.writableEnded) res.write(": runwire keepalive\n\n");
   }, 15_000);
   keepAlive.unref();
   res.once("close", () => clearInterval(keepAlive));
@@ -91,7 +92,7 @@ export async function handleProviderHttpRequest(
     if (res.writableEnded) return;
     if (providerDebugEnabled()) {
       process.stderr.write(
-        `[sideband] provider reply #${requestId}: ${JSON.stringify(providerReplySummary(reply))}\n`,
+        `[runwire] provider reply #${requestId}: ${JSON.stringify(providerReplySummary(reply))}\n`,
       );
     }
     for (const event of replyEvents(reply)) {
@@ -108,8 +109,8 @@ export async function handleProviderHttpRequest(
     const message = errorMessage(error);
     logProviderError(body, message);
     if (!res.writableEnded) {
-      const responseId = `resp_sideband_error_${Date.now()}`;
-      sendFailedEvent(res, responseId, "sideband_bridge_error", message);
+      const responseId = `resp_runwire_error_${Date.now()}`;
+      sendFailedEvent(res, responseId, "runwire_bridge_error", message);
     }
   }
 
@@ -125,7 +126,7 @@ function replyEvents(reply: ProviderReply): SseEvent[] {
   const responseId =
     reply.kind === "tool_call"
       ? `resp_${reply.callId}`
-      : `resp_sideband_complete_${Date.now()}`;
+      : `resp_runwire_complete_${Date.now()}`;
 
   const created: SseEvent = {
     type: "response.created",
@@ -208,7 +209,7 @@ function sendFailedStream(res: ServerResponse, code: string, message: string): v
     "cache-control": "no-cache",
     connection: "keep-alive",
   });
-  sendFailedEvent(res, `resp_sideband_error_${Date.now()}`, code, message);
+  sendFailedEvent(res, `resp_runwire_error_${Date.now()}`, code, message);
 }
 
 function sendFailedEvent(
@@ -236,7 +237,7 @@ function errorMessage(error: unknown): string {
 function logProviderError(body: unknown, message: string): void {
   const summary = providerRequestSummary(body);
   process.stderr.write(
-    `[sideband] provider bridge error: ${message}; ${JSON.stringify(summary)}\n`,
+    `[runwire] provider bridge error: ${message}; ${JSON.stringify(summary)}\n`,
   );
 }
 
@@ -282,7 +283,7 @@ function providerReplySummary(reply: ProviderReply): Record<string, unknown> {
 }
 
 function providerDebugEnabled(): boolean {
-  return process.env.SIDEBAND_DEBUG === "1";
+  return runwireEnvFlag("RUNWIRE_DEBUG", "SIDEBAND_DEBUG");
 }
 
 function singleHeader(value: string | string[] | undefined): string | undefined {

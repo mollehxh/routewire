@@ -1,23 +1,23 @@
 import { CodexTurnBridge } from "./bridge.js";
 import { startCodexProcess, type CodexExit } from "./codex/process.js";
-import { SidebandHttpSurface } from "./http-surface.js";
+import { RunwireHttpSurface } from "./http-surface.js";
 import { selectCollaborationTools } from "./mcp/collaboration-tools.js";
 import { discoverProjectedNativeTools, projectedToolsFingerprint } from "./mcp/projected-tools.js";
-import { createSidebandMcpServer, updateSidebandProjectedTools } from "./mcp/server.js";
+import { createRunwireMcpServer, updateRunwireProjectedTools } from "./mcp/server.js";
 import { discoverNativeSkillTools } from "./mcp/skill-tools.js";
 import {
   loadCodexModelCatalog,
   type CodexModelCatalogEntry,
 } from "./model-catalog.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
-import type { SidebandRuntimeEvent } from "./runtime-events.js";
+import type { RunwireRuntimeEvent } from "./runtime-events.js";
 import type { CodexApprovalPolicy, CodexSandboxMode } from "./tui-settings.js";
 import { ensureTunnelClient } from "./tunnel/install.js";
 import { startTunnelClient, type StartTunnelClientOptions, type TunnelClientHandle } from "./tunnel/process.js";
 
-export type SidebandTunnelOptions = Omit<StartTunnelClientOptions, "mcpUrl">;
+export type RunwireTunnelOptions = Omit<StartTunnelClientOptions, "mcpUrl">;
 
-export interface StartSidebandOptions {
+export interface StartRunwireOptions {
   cwd: string;
   model?: string;
   host?: string;
@@ -32,11 +32,11 @@ export interface StartSidebandOptions {
   quietCodex?: boolean;
   codexCommand?: string;
   startupTimeoutMs?: number;
-  tunnel?: SidebandTunnelOptions;
-  onEvent?: (event: SidebandRuntimeEvent) => void;
+  tunnel?: RunwireTunnelOptions;
+  onEvent?: (event: RunwireRuntimeEvent) => void;
 }
 
-export interface SidebandRuntime {
+export interface RunwireRuntime {
   readonly model: string;
   readonly cwd: string;
   readonly mcpUrl: string;
@@ -47,14 +47,14 @@ export interface SidebandRuntime {
   close(): Promise<void>;
 }
 
-export async function startSideband(options: StartSidebandOptions): Promise<SidebandRuntime> {
+export async function startRunwire(options: StartRunwireOptions): Promise<RunwireRuntime> {
   const model = options.model ?? "gpt-5.6-sol";
   const modelCatalog = options.modelCatalog ?? loadCodexModelCatalog(options.codexHome);
   const allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
   const subagentModelEfforts = Object.fromEntries(
     modelCatalog.map(entry => [entry.id, entry.efforts] as const),
   );
-  const emit = (event: SidebandRuntimeEvent) => {
+  const emit = (event: RunwireRuntimeEvent) => {
     try {
       options.onEvent?.(event);
     } catch {
@@ -62,7 +62,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
     }
   };
   const bridge = new CodexTurnBridge({ model, onEvent: emit });
-  const surface = new SidebandHttpSurface({
+  const surface = new RunwireHttpSurface({
     bridge,
     host: options.host,
     port: options.port,
@@ -98,7 +98,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
     closePromise = (async () => {
       // Every resource gets cleanup even if another cleanup rejects.
       const tunnelClose = Promise.allSettled([tunnel?.close()]);
-      bridge.close("Sideband shutting down");
+      bridge.close("Runwire shutting down");
       const exitedNaturally = await Promise.race([codex.exited.then(() => true), delay(750).then(() => false)]);
       if (!exitedNaturally) {
         codex.terminate();
@@ -133,9 +133,9 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
   });
   let startupTimer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    startupTimer = setTimeout(() => reject(new Error("Sideband startup timed out")), options.startupTimeoutMs ?? 60_000);
+    startupTimer = setTimeout(() => reject(new Error("Runwire startup timed out")), options.startupTimeoutMs ?? 60_000);
   });
-  const initialize = async (): Promise<SidebandRuntime> => {
+  const initialize = async (): Promise<RunwireRuntime> => {
     const execSpec = await bridge.ready();
 
     let projectedTools = await discoverProjectedNativeTools(bridge);
@@ -144,7 +144,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       codexHome: options.codexHome,
       codexCommand: options.codexCommand,
     });
-    if (closing) throw new Error("Sideband startup cancelled");
+    if (closing) throw new Error("Runwire startup cancelled");
     const collaborationTools = selectCollaborationTools(bridge.collaborationTools(), {
       allowedModels: allowedSubagentModels,
       catalog: modelCatalog,
@@ -159,7 +159,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
         const changed = projectedToolsFingerprint(tools) !== projectedToolsFingerprint(projectedTools);
         if (changed) {
           projectedTools = tools;
-          updateSidebandProjectedTools(mcpServer, tools);
+          updateRunwireProjectedTools(mcpServer, tools);
           surface.updateProjectedTools(tools);
         }
         return projectedTools;
@@ -169,7 +169,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       }).finally(() => {refresh = undefined;});
       return refresh;
     };
-    const mcpServer = createSidebandMcpServer({
+    const mcpServer = createRunwireMcpServer({
       bridge, execSpec, projectedTools, nativeSkillTools, collaborationTools, onEvent: emit,
       refreshProjectedTools,
     });
@@ -197,7 +197,7 @@ export async function startSideband(options: StartSidebandOptions): Promise<Side
       }
       if (closing) {
         await startupResult.handle.close();
-        throw new Error("Sideband startup cancelled");
+        throw new Error("Runwire startup cancelled");
       }
       tunnel = startupResult.handle;
       emit({
@@ -265,12 +265,12 @@ function codexExitedBeforeReady(exit: CodexExit): Error {
 
 function codexExitedDuringTunnelStartup(exit: CodexExit): Error {
   if (exit.error) {
-    return new Error(`Codex failed while Sideband was starting the tunnel: ${exit.error.message}`, {
+    return new Error(`Codex failed while Runwire was starting the tunnel: ${exit.error.message}`, {
       cause: exit.error,
     });
   }
   return new Error(
-    `Codex exited while Sideband was starting the tunnel (code=${String(exit.code)}, signal=${String(exit.signal)})`,
+    `Codex exited while Runwire was starting the tunnel (code=${String(exit.code)}, signal=${String(exit.signal)})`,
   );
 }
 

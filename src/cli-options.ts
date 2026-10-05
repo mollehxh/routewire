@@ -63,7 +63,7 @@ export function parseCliOptions(args: string[]): CliOptions {
   }
 
   if (!LOOPBACK_HOSTS.has(options.host)) {
-    throw new Error(`Sideband only binds loopback addresses; received host ${options.host}`);
+    throw new Error(`Runwire only binds loopback addresses; received host ${options.host}`);
   }
 
   return options;

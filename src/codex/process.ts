@@ -63,7 +63,7 @@ export function startCodexProcess(options: StartCodexProcessOptions): CodexProce
   });
 
   child.stdin?.on("error", () => undefined);
-  child.stdin?.end("Sideband bridge turn. Follow the model response.\n");
+  child.stdin?.end("Runwire bridge turn. Follow the model response.\n");
 
   const exited = new Promise<CodexExit>(resolve => {
     let settled = false;

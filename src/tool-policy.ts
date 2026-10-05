@@ -11,7 +11,7 @@ const MODEL_TOOL_DESCRIPTION_PATTERN =
 
 const TEST_HARNESS_TOOL_NAME_PATTERN = /(?:^|__)codex_apps__test_harnes[^_]*_/i;
 
-export const SIDEBAND_EXEC_GUIDANCE = [
+export const RUNWIRE_EXEC_GUIDANCE = [
   "This server runs one real Codex turn and exposes its native Code Mode tools.",
   "Prefer a directly exposed native tool for a single operation.",
   "Use exec when multiple native calls, batching, persistent JavaScript values, control flow, or an unprojected native Codex tool make Code Mode useful.",
@@ -35,7 +35,7 @@ export function isModelSpawningTool(tool: ToolMetadata): boolean {
   );
 }
 
-export function isSidebandBlockedTool(tool: ToolMetadata): boolean {
+export function isRunwireBlockedTool(tool: ToolMetadata): boolean {
   return isModelSpawningTool(tool) || TEST_HARNESS_TOOL_NAME_PATTERN.test(tool.name);
 }
 
@@ -48,46 +48,46 @@ export function wrapExecCode(code: string): string {
   const testHarnessPattern = JSON.stringify(TEST_HARNESS_TOOL_NAME_PATTERN.source);
 
   return `${pragma}{
-  const __sidebandNamePattern = new RegExp(${namePattern}, "i");
-  const __sidebandDescriptionPattern = new RegExp(${descriptionPattern}, "i");
-  const __sidebandTestHarnessPattern = new RegExp(${testHarnessPattern}, "i");
-  const __sidebandOriginalTools = globalThis.tools;
-  const __sidebandOriginalInventory = Array.isArray(globalThis.ALL_TOOLS)
+  const __runwireNamePattern = new RegExp(${namePattern}, "i");
+  const __runwireDescriptionPattern = new RegExp(${descriptionPattern}, "i");
+  const __runwireTestHarnessPattern = new RegExp(${testHarnessPattern}, "i");
+  const __runwireOriginalTools = globalThis.tools;
+  const __runwireOriginalInventory = Array.isArray(globalThis.ALL_TOOLS)
     ? globalThis.ALL_TOOLS
     : [];
-  const __sidebandBlockedNames = new Set(
-    __sidebandOriginalInventory
+  const __runwireBlockedNames = new Set(
+    __runwireOriginalInventory
       .filter(tool => {
         const name = String(tool?.name ?? "");
         const description = String(tool?.description ?? "");
-        return __sidebandNamePattern.test(name) ||
-          __sidebandDescriptionPattern.test(description) ||
-          __sidebandTestHarnessPattern.test(name);
+        return __runwireNamePattern.test(name) ||
+          __runwireDescriptionPattern.test(description) ||
+          __runwireTestHarnessPattern.test(name);
       })
       .map(tool => String(tool.name)),
   );
-  const __sidebandFilteredTools = Object.create(null);
-  for (const tool of __sidebandOriginalInventory) {
+  const __runwireFilteredTools = Object.create(null);
+  for (const tool of __runwireOriginalInventory) {
     const name = String(tool?.name ?? "");
-    if (!name || __sidebandBlockedNames.has(name)) continue;
-    const callable = __sidebandOriginalTools[name];
+    if (!name || __runwireBlockedNames.has(name)) continue;
+    const callable = __runwireOriginalTools[name];
     if (typeof callable === "function") {
-      Object.defineProperty(__sidebandFilteredTools, name, {
-        value: callable.bind(__sidebandOriginalTools),
+      Object.defineProperty(__runwireFilteredTools, name, {
+        value: callable.bind(__runwireOriginalTools),
         enumerable: true,
       });
     }
   }
-  globalThis.ALL_TOOLS = __sidebandOriginalInventory.filter(
-    tool => !__sidebandBlockedNames.has(String(tool?.name ?? "")),
+  globalThis.ALL_TOOLS = __runwireOriginalInventory.filter(
+    tool => !__runwireBlockedNames.has(String(tool?.name ?? "")),
   );
-  globalThis.tools = new Proxy(__sidebandFilteredTools, {
+  globalThis.tools = new Proxy(__runwireFilteredTools, {
     get(target, property, receiver) {
       const name = String(property);
-      if (__sidebandTestHarnessPattern.test(name)) {
+      if (__runwireTestHarnessPattern.test(name)) {
         throw new Error("Blocked test-harness tool: " + name);
       }
-      if (__sidebandBlockedNames.has(name) || __sidebandNamePattern.test(name)) {
+      if (__runwireBlockedNames.has(name) || __runwireNamePattern.test(name)) {
         throw new Error("Blocked model-spawning tool: " + name);
       }
       return Reflect.get(target, property, receiver);

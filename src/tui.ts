@@ -5,7 +5,7 @@ import {
   catalogEntry,
   type CodexModelCatalogEntry,
 } from "./model-catalog.js";
-import type { SidebandRuntimeEvent } from "./runtime-events.js";
+import type { RunwireRuntimeEvent } from "./runtime-events.js";
 import {RunwireInkApp, type RunwireInkState} from "./tui-ink.js";
 import {
   hasStoredApiKey,
@@ -148,7 +148,7 @@ export class RunwireTui {
     this.render();
   }
 
-  handle(event: SidebandRuntimeEvent): void {
+  handle(event: RunwireRuntimeEvent): void {
     if (event.type === "component") {
       this.#components.set(event.component, event.state);
       this.render();
@@ -546,7 +546,7 @@ export class RunwireTui {
 }
 
 export function describeActivityEvent(
-  event: Extract<SidebandRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
 ): Activity | undefined {
   if (event.namespace === "runwire" && event.name === "get_skill") {
     const names = Array.isArray(event.arguments?.names)
@@ -600,7 +600,7 @@ export function describeActivityEvent(
 }
 
 function describeCollaborationEvent(
-  event: Extract<SidebandRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
 ): Activity | undefined {
   if (event.name === "wait_agent" || event.name === "list_agents") return undefined;
   const task = agentTaskReference(
@@ -631,16 +631,16 @@ function describeCollaborationEvent(
 
 function isInternalRunwireCode(code: string): boolean {
   return (
-    code.includes("const __sidebandInventory = ALL_TOOLS") ||
-    code.includes("const __sidebandSkillTools = ALL_TOOLS") ||
-    code.includes("const __sidebandCatalog = __sidebandNative") ||
-    code.includes("const __sidebandContent = String(__sidebandNative")
+    code.includes("const __runwireInventory = ALL_TOOLS") ||
+    code.includes("const __runwireSkillTools = ALL_TOOLS") ||
+    code.includes("const __runwireCatalog = __runwireNative") ||
+    code.includes("const __runwireContent = String(__runwireNative")
   );
 }
 
 function parseProjectedInvocation(code: string): { name: string; arguments: unknown } | undefined {
   const match = code.match(
-    /const __sidebandNativeResult = await tools\[("(?:\\.|[^"\\])*")\]\(([^\n]*)\);/,
+    /const __runwireNativeResult = await tools\[("(?:\\.|[^"\\])*")\]\(([^\n]*)\);/,
   );
   if (!match?.[1] || match[2] === undefined) return undefined;
   try {
@@ -651,7 +651,7 @@ function parseProjectedInvocation(code: string): { name: string; arguments: unkn
 }
 
 function activityFromTool(
-  event: Extract<SidebandRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
   rawName: string,
   arguments_: unknown,
   source = "",
