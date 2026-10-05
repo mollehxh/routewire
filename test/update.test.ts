@@ -105,6 +105,29 @@ describe("Routewire update checks", () => {
     expect(fetches).toBe(1);
   });
 
+  it("rechecks the registry on every launch when the cached version is not newer", async () => {
+    const cacheFile = tempCacheFile();
+    let latestVersion = "0.1.0";
+    const fetchImpl = vi.fn(async () => registryResponse(latestVersion));
+
+    await expect(checkForRoutewireUpdate({
+      currentVersion: "0.1.0",
+      cacheFile,
+      fetchImpl,
+      now: () => 10_000,
+    })).resolves.toBeUndefined();
+
+    latestVersion = "0.1.1";
+    await expect(checkForRoutewireUpdate({
+      currentVersion: "0.1.0",
+      cacheFile,
+      fetchImpl,
+      now: () => 10_500,
+    })).resolves.toMatchObject({latestVersion: "0.1.1"});
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("does not reuse a cached version from a different registry", async () => {
     const cacheFile = tempCacheFile();
     const fetchImpl = vi.fn(async (input: string | URL) => {

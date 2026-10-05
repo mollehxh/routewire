@@ -32,8 +32,10 @@ mode it prints the local MCP and provider endpoints.
 ## Updates
 
 Interactive Routewire checks npm for a newer release at startup. The check is
-non-blocking, cached for one hour, and fails open when the registry is
-unavailable. When an update exists, Routewire offers two choices before the main
+non-blocking and fails open when the registry is unavailable. A discovered newer
+release is cached for one hour, while an up-to-date result is checked again on
+the next launch so newly published versions are not hidden by stale cache. When
+an update exists, Routewire offers two choices before the main
 menu: install the latest release now or continue with the current version.
 
 Continuing does not suppress the release, so Routewire offers the same update

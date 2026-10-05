@@ -61,13 +61,18 @@ export async function checkForRoutewireUpdate(
   const cached = await readUpdateCache(cacheFile);
   const checkedAt = now();
 
+  const cachedUpdate = cached && cached.registry === registry
+    ? updateInfo(currentVersion, cached.latestVersion, options.packageManager)
+    : undefined;
+
   if (
     cached &&
     cached.registry === registry &&
     checkedAt - cached.checkedAt >= 0 &&
-    checkedAt - cached.checkedAt < cacheTtlMs
+    checkedAt - cached.checkedAt < cacheTtlMs &&
+    cachedUpdate
   ) {
-    return updateInfo(currentVersion, cached.latestVersion, options.packageManager);
+    return cachedUpdate;
   }
 
   try {
