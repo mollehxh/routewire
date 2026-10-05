@@ -1,6 +1,6 @@
 {
   "name": "routewire",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bridge a live local Codex tool surface into ChatGPT over MCP.",
   "type": "module",
   "license": "MIT",
