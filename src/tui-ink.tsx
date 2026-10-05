@@ -274,6 +274,9 @@ function MenuView({state}: {state: RoutewireInkState}) {
         <Text> </Text>
         <Text bold>R O U T E W I R E</Text>
         <Text dimColor>Local Codex bridge for ChatGPT</Text>
+        <Box width={52} marginTop={1} justifyContent="center">
+          <Text dimColor wrap="truncate-middle">{state.cwd}</Text>
+        </Box>
       </Box>
 
       <Box width={44} marginTop={3} flexDirection="column">
@@ -327,31 +330,36 @@ function SettingsBreadcrumb({view}: {view: InkView}) {
 function InternalBreadcrumb({
   segments,
   rightText,
+  subtext,
 }: {
   segments: readonly string[];
   rightText?: string;
+  subtext?: string;
 }) {
   return (
     <Box
       width="100%"
+      flexDirection="column"
       borderStyle="single"
       borderTop={false}
       borderLeft={false}
       borderRight={false}
       borderBottomDimColor
-      justifyContent="space-between"
     >
-      <Box>
-        <Text color={ROUTEWIRE_ACCENT} bold>//&gt;</Text>
-        <Text>  </Text>
-        {segments.map((segment, index) => (
-          <Box key={`${segment}-${index}`}>
-            {index > 0 ? <Text dimColor> / </Text> : null}
-            <Text bold={index === segments.length - 1} dimColor={index < segments.length - 1}>{segment}</Text>
-          </Box>
-        ))}
+      <Box width="100%" justifyContent="space-between">
+        <Box>
+          <Text color={ROUTEWIRE_ACCENT} bold>//&gt;</Text>
+          <Text>  </Text>
+          {segments.map((segment, index) => (
+            <Box key={`${segment}-${index}`}>
+              {index > 0 ? <Text dimColor> / </Text> : null}
+              <Text bold={index === segments.length - 1} dimColor={index < segments.length - 1}>{segment}</Text>
+            </Box>
+          ))}
+        </Box>
+        {rightText ? <Text dimColor>{rightText}</Text> : null}
       </Box>
-      {rightText ? <Text dimColor>{rightText}</Text> : null}
+      {subtext ? <Text dimColor wrap="truncate-middle">{subtext}</Text> : null}
     </Box>
   );
 }
@@ -472,7 +480,7 @@ function ActivityView({
     : 0;
   const splitLayout = activeAgents.length > 0 && terminalColumns >= agentPanelWidth + 58;
   const agentRows = !splitLayout && activeAgents.length > 0 ? activeAgents.length + 2 : 0;
-  const visibleCount = Math.max(4, terminalRows - 8 - agentRows);
+  const visibleCount = Math.max(4, terminalRows - 7 - agentRows);
   const maxScrollTop = Math.max(0, events.length - visibleCount);
   const initialScrollTop = state.selection > 0
     ? Math.min(state.selection, maxScrollTop)
@@ -539,6 +547,7 @@ function ActivityView({
       <InternalBreadcrumb
         segments={["activity"]}
         rightText={`${events.length} event${events.length === 1 ? "" : "s"}`}
+        subtext={state.cwd}
       />
       <Box flexGrow={1} flexDirection="column">
         {splitLayout ? (
@@ -559,6 +568,7 @@ function ActivityView({
       <Footer
         items={["↑↓ scroll", "g latest", "esc back", "q quit"]}
         permissions={state.settings.sandboxMode}
+        topMargin={0}
       />
     </Box>
   );
@@ -755,14 +765,16 @@ function Marker({selected}: {selected: boolean}) {
 function Footer({
   items,
   permissions,
+  topMargin = 1,
 }: {
   items: string[];
   permissions: RoutewireSettings["sandboxMode"];
+  topMargin?: number;
 }) {
   return (
     <Box
       width="100%"
-      marginTop={1}
+      marginTop={topMargin}
       borderStyle="single"
       borderBottom={false}
       borderLeft={false}

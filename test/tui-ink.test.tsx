@@ -92,6 +92,7 @@ describe("Routewire Ink TUI", () => {
     expect(frame).toContain("//>");
     expect(frame).toContain("R O U T E W I R E");
     expect(frame).toContain("Local Codex bridge for ChatGPT");
+    expect(frame).toContain("/repo");
     expect(frame).not.toContain("ready");
     expect(frame).not.toContain("workspace write");
     expect(frame).not.toMatch(/^\s*Connection\s*$/m);
@@ -121,6 +122,7 @@ describe("Routewire Ink TUI", () => {
     const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("//>  settings");
+    expect(frame).not.toContain("/repo");
     expect(frame).toContain("Connection");
     expect(frame).toContain("Codex");
     expect(frame).not.toContain("Agents");
@@ -206,6 +208,7 @@ describe("Routewire Ink TUI", () => {
     const headerLine = frame.split("\n").find(line => line.includes("//>  activity")) ?? "";
     expect(headerLine).toContain("//>  activity");
     expect(headerLine).toContain("1 event");
+    expect(frame).toContain("/repo");
     expect(frame).toContain("shell");
     expect(frame).toContain("npm test");
     expect(frame).toContain("running");
@@ -435,6 +438,11 @@ describe("Routewire Ink TUI", () => {
     const liveFrame = live.lastFrame() ?? "";
     expect(liveFrame).toContain("command-29");
     expect(liveFrame).toContain("30 events");
+    const liveLines = liveFrame.split("\n");
+    const tailLine = liveLines.findIndex(line => line.includes("command-29"));
+    expect(tailLine).toBeGreaterThanOrEqual(0);
+    expect(liveLines[tailLine + 1]?.trim()).toBe("");
+    expect(liveLines[tailLine + 2]).toMatch(/─/);
     expect(liveFrame).not.toContain("Live");
     expect(liveFrame).not.toContain("History");
     expect(liveFrame).not.toContain("command-0");

@@ -248,7 +248,6 @@ export class RoutewireTui {
       active.output = event.output;
       this.#active.delete(event.callId);
       this.#recent.unshift(active);
-      this.#recent.splice(40);
     }
 
     if (event.namespace === "collaboration" && event.name === "spawn_agent" && active) {
@@ -310,7 +309,6 @@ export class RoutewireTui {
         output: text,
         agentTaskName: taskName,
       });
-      this.#recent.splice(40);
     }
   }
 
