@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe("startTunnelClient", () => {
   it("waits for readyz and stops the child it owns", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-test-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "routewire-tunnel-test-"));
     tempDirs.push(dir);
     const script = path.join(dir, "fake-tunnel-client.mjs");
     const argsFile = path.join(dir, "args.json");
@@ -90,7 +90,7 @@ process.on("SIGINT", () => server.close(() => process.exit(0)));
   });
 
   it("drains child stdout and stderr even when quiet", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-drain-test-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "routewire-tunnel-drain-test-"));
     tempDirs.push(dir);
     const script = path.join(dir, "fake-chatty-tunnel-client.mjs");
     const doneFile = path.join(dir, "done");
@@ -145,7 +145,7 @@ process.on("SIGINT", () => server.close(() => process.exit(0)));
   });
 
   it("detects a stalled control-plane poller after startup", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-health-test-"));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "routewire-tunnel-health-test-"));
     tempDirs.push(dir);
     const script = path.join(dir, "fake-unhealthy-tunnel-client.mjs");
 

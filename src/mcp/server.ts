@@ -2,31 +2,31 @@ import { McpServer, type CallToolResult, type Tool, type ServerContext } from "@
 import { z } from "zod";
 
 import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
-import { RUNWIRE_NAME, RUNWIRE_VERSION } from "../meta.js";
+import { ROUTEWIRE_NAME, ROUTEWIRE_VERSION } from "../meta.js";
 import { type ExecToolSpec } from "../provider/protocol.js";
 import {
   wrapExecCode,
 } from "../tool-policy.js";
 import {execToolDefinition} from "./exec-tool.js";
 import {invokeExecAndWait} from "./code-mode.js";
-import { invokeBootstrap, RUNWIRE_BOOTSTRAP_TOOL } from "./bootstrap.js";
+import { invokeBootstrap, ROUTEWIRE_BOOTSTRAP_TOOL } from "./bootstrap.js";
 import {
   invokeCollaborationTool,
   type CollaborationTool,
 } from "./collaboration-tools.js";
-import { RUNWIRE_MCP_INSTRUCTIONS } from "./instructions.js";
+import { ROUTEWIRE_MCP_INSTRUCTIONS } from "./instructions.js";
 import {
   invokeProjectedNativeTool,
   projectedToolsFingerprint,
   type ProjectedNativeTool,
 } from "./projected-tools.js";
 import {
-  invokeRunwireSkillTool,
-  RUNWIRE_SKILL_TOOL_DEFINITIONS,
+  invokeRoutewireSkillTool,
+  ROUTEWIRE_SKILL_TOOL_DEFINITIONS,
   type NativeSkillTools,
 } from "./skill-tools.js";
 
-export interface CreateRunwireMcpServerOptions {
+export interface CreateRoutewireMcpServerOptions {
   bridge: CodexTurnBridge;
   execSpec: ExecToolSpec;
   projectedTools?: ProjectedNativeTool[];
@@ -36,18 +36,18 @@ export interface CreateRunwireMcpServerOptions {
   refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
 }
 
-export function createRunwireMcpServer(options: CreateRunwireMcpServerOptions): McpServer {
+export function createRoutewireMcpServer(options: CreateRoutewireMcpServerOptions): McpServer {
   const server = new McpServer(
-    { name: RUNWIRE_NAME, version: RUNWIRE_VERSION },
-    { instructions: RUNWIRE_MCP_INSTRUCTIONS },
+    { name: ROUTEWIRE_NAME, version: ROUTEWIRE_VERSION },
+    { instructions: ROUTEWIRE_MCP_INSTRUCTIONS },
   );
 
   server.registerTool(
-    RUNWIRE_BOOTSTRAP_TOOL.name,
+    ROUTEWIRE_BOOTSTRAP_TOOL.name,
     {
-      title: RUNWIRE_BOOTSTRAP_TOOL.title,
-      description: RUNWIRE_BOOTSTRAP_TOOL.description,
-      inputSchema: RUNWIRE_BOOTSTRAP_TOOL.inputSchema,
+      title: ROUTEWIRE_BOOTSTRAP_TOOL.title,
+      description: ROUTEWIRE_BOOTSTRAP_TOOL.description,
+      inputSchema: ROUTEWIRE_BOOTSTRAP_TOOL.inputSchema,
     },
     async (): Promise<CallToolResult> => {
       try {
@@ -113,7 +113,7 @@ export function createRunwireMcpServer(options: CreateRunwireMcpServerOptions): 
   }
 
   if (options.nativeSkillTools) {
-    for (const definition of RUNWIRE_SKILL_TOOL_DEFINITIONS) {
+    for (const definition of ROUTEWIRE_SKILL_TOOL_DEFINITIONS) {
       server.registerTool(
         definition.name,
         {
@@ -123,7 +123,7 @@ export function createRunwireMcpServer(options: CreateRunwireMcpServerOptions): 
         },
         async (arguments_: unknown): Promise<CallToolResult> => {
           try {
-            const result = await invokeRunwireSkillTool(
+            const result = await invokeRoutewireSkillTool(
               options.bridge,
               options.nativeSkillTools!,
               definition.name,
@@ -157,7 +157,7 @@ export function createRunwireMcpServer(options: CreateRunwireMcpServerOptions): 
   if (options.refreshProjectedTools) {
     server.server.setRequestHandler("tools/list", async () => {
       updateProjected(await options.refreshProjectedTools!());
-      return {tools: listRunwireTools(options)};
+      return {tools: listRoutewireTools(options)};
     });
   }
   return server;
@@ -168,16 +168,16 @@ function errorMessage(error: unknown): string {
 }
 
 const projectedUpdaters = new WeakMap<McpServer, (tools: ProjectedNativeTool[]) => void>();
-export function updateRunwireProjectedTools(server: McpServer, tools: ProjectedNativeTool[]): void {
+export function updateRoutewireProjectedTools(server: McpServer, tools: ProjectedNativeTool[]): void {
   projectedUpdaters.get(server)?.(tools);
 }
 
-function listRunwireTools(options: CreateRunwireMcpServerOptions): Tool[] {
+function listRoutewireTools(options: CreateRoutewireMcpServerOptions): Tool[] {
   const definitions = [
-    RUNWIRE_BOOTSTRAP_TOOL,
+    ROUTEWIRE_BOOTSTRAP_TOOL,
     ...(options.projectedTools ?? []),
     ...(options.collaborationTools ?? []),
-    ...(options.nativeSkillTools ? RUNWIRE_SKILL_TOOL_DEFINITIONS : []),
+    ...(options.nativeSkillTools ? ROUTEWIRE_SKILL_TOOL_DEFINITIONS : []),
     execToolDefinition(options.execSpec),
   ];
   return definitions.map(({name,title,description,inputSchema}) => ({

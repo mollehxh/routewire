@@ -221,7 +221,7 @@ describe("CodexTurnBridge", () => {
     expect(retryReplies).toHaveLength(1);
     expect(retryReplies[0]).toMatchObject({
       kind: "tool_call",
-      callId: "runwire-1",
+      callId: "routewire-1",
     });
   });
 
@@ -382,16 +382,16 @@ describe("CodexTurnBridge events", () => {
     });
     await bridge.ready();
 
-    const call = bridge.invokeExec("text('RUNWIRE_OK');");
+    const call = bridge.invokeExec("text('ROUTEWIRE_OK');");
     if (!reply || reply.kind !== "tool_call") throw new Error("expected tool_call");
 
     bridge.acceptModelRequest(
-      modelRequest({ callId: reply.callId, output: "RUNWIRE_OK" }),
+      modelRequest({ callId: reply.callId, output: "ROUTEWIRE_OK" }),
       () => undefined,
     );
 
     await expect(call).resolves.toEqual({
-      content: [{ type: "text", text: "RUNWIRE_OK" }],
+      content: [{ type: "text", text: "ROUTEWIRE_OK" }],
       isError: false,
     });
     expect(events.map(event => event.type)).toEqual(["call_started", "call_finished"]);
@@ -399,7 +399,7 @@ describe("CodexTurnBridge events", () => {
     expect(events[1]).toMatchObject({
       type: "call_finished",
       callId: reply.callId,
-      output: "RUNWIRE_OK",
+      output: "ROUTEWIRE_OK",
     });
   });
 

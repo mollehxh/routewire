@@ -1,9 +1,9 @@
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {render} from "ink-testing-library";
 
-import {RunwireInkApp, type RunwireInkState} from "../src/tui-ink.js";
+import {RoutewireInkApp, type RoutewireInkState} from "../src/tui-ink.js";
 import type {CodexModelCatalogEntry} from "../src/model-catalog.js";
-import {DEFAULT_RUNWIRE_SETTINGS} from "../src/tui-settings.js";
+import {DEFAULT_ROUTEWIRE_SETTINGS} from "../src/tui-settings.js";
 
 const modelCatalog: readonly CodexModelCatalogEntry[] = [
   {
@@ -24,7 +24,7 @@ const modelCatalog: readonly CodexModelCatalogEntry[] = [
   },
 ];
 
-const baseState = (): RunwireInkState => ({
+const baseState = (): RoutewireInkState => ({
   cwd: "/repo",
   model: "gpt-5.6-sol",
   modelCatalog,
@@ -34,7 +34,7 @@ const baseState = (): RunwireInkState => ({
   view: "activity",
   selection: 0,
   inputBuffer: "",
-  settings: {...DEFAULT_RUNWIRE_SETTINGS},
+  settings: {...DEFAULT_ROUTEWIRE_SETTINGS},
   apiKeyConfigured: false,
   components: new Map([["codex", "ready"], ["tunnel", "stopped"]]),
   active: [],
@@ -46,12 +46,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("Runwire Ink TUI", () => {
+describe("Routewire Ink TUI", () => {
   it("renders a non-blocking startup update check", () => {
     const state = baseState();
     state.runtimeState = "stopped";
     state.view = "update_check";
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("Checking for updates");
     expect(frame).toContain("q quit");
@@ -65,17 +65,17 @@ describe("Runwire Ink TUI", () => {
     state.update = {
       currentVersion: "0.1.0",
       latestVersion: "0.2.0",
-      command: "npm install -g runwire@latest",
+      command: "npm install -g routewire@latest",
       status: "available",
     };
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("Update available");
     expect(frame).toContain("0.1.0");
     expect(frame).toContain("0.2.0");
     expect(frame).toContain("Update now");
     expect(frame).toContain("Continue with 0.1.0");
-    expect(frame).toContain("npm install -g runwire@latest");
+    expect(frame).toContain("npm install -g routewire@latest");
     ui.unmount();
   });
 
@@ -83,14 +83,14 @@ describe("Runwire Ink TUI", () => {
     const state = baseState();
     state.runtimeState = "stopped";
     state.view = "menu";
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("Start");
     expect(frame).toContain("Settings");
     expect(frame).toContain("Activity");
     expect(frame).toContain("Quit");
     expect(frame).toContain("//>");
-    expect(frame).toContain("R U N W I R E");
+    expect(frame).toContain("R O U T E W I R E");
     expect(frame).toContain("Local Codex bridge for ChatGPT");
     expect(frame).not.toContain("ready");
     expect(frame).not.toContain("workspace write");
@@ -108,7 +108,7 @@ describe("Runwire Ink TUI", () => {
     const state = baseState();
     state.view = "menu";
     state.runtimeState = "running";
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toMatch(/Ⅱ\s+Stop/);
     ui.unmount();
@@ -118,7 +118,7 @@ describe("Runwire Ink TUI", () => {
     const state = baseState();
     state.view = "settings";
     state.selection = 0;
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("//>  settings");
     expect(frame).toContain("Connection");
@@ -140,7 +140,7 @@ describe("Runwire Ink TUI", () => {
     const state = baseState();
     state.view = "settings_connection";
     state.selection = 0;
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("//>  settings / connection");
     expect(frame).not.toContain("Remote access");
@@ -154,7 +154,7 @@ describe("Runwire Ink TUI", () => {
     const state = baseState();
     state.view = "settings_codex";
     state.selection = 0;
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("//>  settings / codex");
     expect(frame).toContain("Permissions");
@@ -177,7 +177,7 @@ describe("Runwire Ink TUI", () => {
       ...state.settings,
       allowedSubagentModels: ["gpt-6.1-sol", "gpt-6-luna"],
     };
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("//>  settings / codex / subagent models");
     expect(frame).toContain("gpt-6.1-sol");
@@ -201,7 +201,7 @@ describe("Runwire Ink TUI", () => {
       startedAt: now - 2_000,
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     const headerLine = frame.split("\n").find(line => line.includes("//>  activity")) ?? "";
     expect(headerLine).toContain("//>  activity");
@@ -240,7 +240,7 @@ describe("Runwire Ink TUI", () => {
       startedAt: start.getTime() - 5_000,
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("Agents 1 active");
     expect(frame).toContain("review_tests");
@@ -268,7 +268,7 @@ describe("Runwire Ink TUI", () => {
       agentTaskName: "review_tests",
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("review_tests");
     expect(frame).toContain("gpt-6-luna  high");
@@ -297,7 +297,7 @@ describe("Runwire Ink TUI", () => {
       startedAt: now - 5_000,
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("npm test");
     expect(frame).toContain("Agents 1 active");
@@ -308,7 +308,7 @@ describe("Runwire Ink TUI", () => {
   it("does not reserve or render an Agents sidebar when no agent is active", () => {
     const state = baseState();
     state.agents = [];
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     expect(ui.lastFrame()).not.toContain("Agents");
     ui.unmount();
   });
@@ -347,7 +347,7 @@ describe("Runwire Ink TUI", () => {
       durationMs: 12_000,
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("done");
     expect(frame).toContain("12s");
@@ -377,7 +377,7 @@ describe("Runwire Ink TUI", () => {
       startedAt: now - 5_000,
     }];
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame).toContain("30 events");
     expect(frame).not.toContain("Live");
@@ -406,7 +406,7 @@ describe("Runwire Ink TUI", () => {
       isError: false,
     }));
 
-    const ui = render(<RunwireInkApp state={state} onKey={() => undefined}/>);
+    const ui = render(<RoutewireInkApp state={state} onKey={() => undefined}/>);
     const frame = ui.lastFrame() ?? "";
     expect(frame.indexOf("command-0")).toBeLessThan(frame.indexOf("command-1"));
     expect(frame.indexOf("command-1")).toBeLessThan(frame.indexOf("command-2"));
@@ -431,7 +431,7 @@ describe("Runwire Ink TUI", () => {
     const liveState = baseState();
     liveState.selection = 0;
     liveState.recent = events;
-    const live = render(<RunwireInkApp state={liveState} onKey={() => undefined}/>);
+    const live = render(<RoutewireInkApp state={liveState} onKey={() => undefined}/>);
     const liveFrame = live.lastFrame() ?? "";
     expect(liveFrame).toContain("command-29");
     expect(liveFrame).toContain("30 events");
@@ -463,7 +463,7 @@ describe("Runwire Ink TUI", () => {
         isError: false,
       }],
     };
-    live.rerender(<RunwireInkApp state={withNewTail} onKey={() => undefined}/>);
+    live.rerender(<RoutewireInkApp state={withNewTail} onKey={() => undefined}/>);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(live.lastFrame()).toContain("command-30");
 
@@ -484,7 +484,7 @@ describe("Runwire Ink TUI", () => {
         isError: false,
       }],
     };
-    live.rerender(<RunwireInkApp state={whileScrolled} onKey={() => undefined}/>);
+    live.rerender(<RoutewireInkApp state={whileScrolled} onKey={() => undefined}/>);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(live.lastFrame()).not.toContain("command-31");
     live.stdin.write("g");

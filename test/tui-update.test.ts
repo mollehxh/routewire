@@ -4,10 +4,10 @@ import path from "node:path";
 import {PassThrough} from "node:stream";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
-import type {RunwireInkState} from "../src/tui-ink.js";
-import {RunwireTui} from "../src/tui.js";
+import type {RoutewireInkState} from "../src/tui-ink.js";
+import {RoutewireTui} from "../src/tui.js";
 
-const ink = vi.hoisted(() => ({props: undefined as undefined | {state: RunwireInkState; onKey(key: string): void}}));
+const ink = vi.hoisted(() => ({props: undefined as undefined | {state: RoutewireInkState; onKey(key: string): void}}));
 vi.mock("ink", async importOriginal => ({
   ...await importOriginal<typeof import("ink")>(),
   render: (element: {props: typeof ink.props}) => {
@@ -20,11 +20,11 @@ const cleanup: Array<() => void> = [];
 afterEach(() => {for (const dispose of cleanup.splice(0).reverse()) dispose(); vi.unstubAllEnvs();});
 
 function setup(onUpdate = vi.fn()) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-update-tui-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-update-tui-"));
   cleanup.push(() => fs.rmSync(dir, {recursive: true, force: true}));
   vi.stubEnv("XDG_CONFIG_HOME", dir);
   const output = Object.assign(new PassThrough(), {isTTY: true}) as unknown as NodeJS.WriteStream;
-  const tui = new RunwireTui({
+  const tui = new RoutewireTui({
     cwd: dir,
     model: "gpt-5.6-sol",
     modelCatalog: [],
@@ -36,19 +36,19 @@ function setup(onUpdate = vi.fn()) {
   tui.showAvailableUpdate({
     currentVersion: "0.1.0",
     latestVersion: "0.2.0",
-    action: {command: "npm", args: ["install", "--global", "runwire@latest"], display: "npm install -g runwire@latest"},
+    action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
   });
   cleanup.push(() => tui.stop());
   return {tui, onUpdate};
 }
 
-describe("Runwire update prompt", () => {
+describe("Routewire update prompt", () => {
   it("moves from the startup check to the normal menu when no update exists", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-update-check-tui-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-update-check-tui-"));
     cleanup.push(() => fs.rmSync(dir, {recursive: true, force: true}));
     vi.stubEnv("XDG_CONFIG_HOME", dir);
     const output = Object.assign(new PassThrough(), {isTTY: true}) as unknown as NodeJS.WriteStream;
-    const tui = new RunwireTui({cwd: dir, model: "gpt-5.6-sol", modelCatalog: [], output, checkingForUpdate: true});
+    const tui = new RoutewireTui({cwd: dir, model: "gpt-5.6-sol", modelCatalog: [], output, checkingForUpdate: true});
     tui.start();
     cleanup.push(() => tui.stop());
     expect(ink.props!.state.view).toBe("update_check");

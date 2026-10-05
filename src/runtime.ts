@@ -1,23 +1,23 @@
 import { CodexTurnBridge } from "./bridge.js";
 import { startCodexProcess, type CodexExit } from "./codex/process.js";
-import { RunwireHttpSurface } from "./http-surface.js";
+import { RoutewireHttpSurface } from "./http-surface.js";
 import { selectCollaborationTools } from "./mcp/collaboration-tools.js";
 import { discoverProjectedNativeTools, projectedToolsFingerprint } from "./mcp/projected-tools.js";
-import { createRunwireMcpServer, updateRunwireProjectedTools } from "./mcp/server.js";
+import { createRoutewireMcpServer, updateRoutewireProjectedTools } from "./mcp/server.js";
 import { discoverNativeSkillTools } from "./mcp/skill-tools.js";
 import {
   loadCodexModelCatalog,
   type CodexModelCatalogEntry,
 } from "./model-catalog.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
-import type { RunwireRuntimeEvent } from "./runtime-events.js";
+import type { RoutewireRuntimeEvent } from "./runtime-events.js";
 import type { CodexApprovalPolicy, CodexSandboxMode } from "./tui-settings.js";
 import { ensureTunnelClient } from "./tunnel/install.js";
 import { startTunnelClient, type StartTunnelClientOptions, type TunnelClientHandle } from "./tunnel/process.js";
 
-export type RunwireTunnelOptions = Omit<StartTunnelClientOptions, "mcpUrl">;
+export type RoutewireTunnelOptions = Omit<StartTunnelClientOptions, "mcpUrl">;
 
-export interface StartRunwireOptions {
+export interface StartRoutewireOptions {
   cwd: string;
   model?: string;
   host?: string;
@@ -32,11 +32,11 @@ export interface StartRunwireOptions {
   quietCodex?: boolean;
   codexCommand?: string;
   startupTimeoutMs?: number;
-  tunnel?: RunwireTunnelOptions;
-  onEvent?: (event: RunwireRuntimeEvent) => void;
+  tunnel?: RoutewireTunnelOptions;
+  onEvent?: (event: RoutewireRuntimeEvent) => void;
 }
 
-export interface RunwireRuntime {
+export interface RoutewireRuntime {
   readonly model: string;
   readonly cwd: string;
   readonly mcpUrl: string;
@@ -47,14 +47,14 @@ export interface RunwireRuntime {
   close(): Promise<void>;
 }
 
-export async function startRunwire(options: StartRunwireOptions): Promise<RunwireRuntime> {
+export async function startRoutewire(options: StartRoutewireOptions): Promise<RoutewireRuntime> {
   const model = options.model ?? "gpt-5.6-sol";
   const modelCatalog = options.modelCatalog ?? loadCodexModelCatalog(options.codexHome);
   const allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
   const subagentModelEfforts = Object.fromEntries(
     modelCatalog.map(entry => [entry.id, entry.efforts] as const),
   );
-  const emit = (event: RunwireRuntimeEvent) => {
+  const emit = (event: RoutewireRuntimeEvent) => {
     try {
       options.onEvent?.(event);
     } catch {
@@ -62,7 +62,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
     }
   };
   const bridge = new CodexTurnBridge({ model, onEvent: emit });
-  const surface = new RunwireHttpSurface({
+  const surface = new RoutewireHttpSurface({
     bridge,
     host: options.host,
     port: options.port,
@@ -98,7 +98,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
     closePromise = (async () => {
       // Every resource gets cleanup even if another cleanup rejects.
       const tunnelClose = Promise.allSettled([tunnel?.close()]);
-      bridge.close("Runwire shutting down");
+      bridge.close("Routewire shutting down");
       const exitedNaturally = await Promise.race([codex.exited.then(() => true), delay(750).then(() => false)]);
       if (!exitedNaturally) {
         codex.terminate();
@@ -133,9 +133,9 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
   });
   let startupTimer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    startupTimer = setTimeout(() => reject(new Error("Runwire startup timed out")), options.startupTimeoutMs ?? 60_000);
+    startupTimer = setTimeout(() => reject(new Error("Routewire startup timed out")), options.startupTimeoutMs ?? 60_000);
   });
-  const initialize = async (): Promise<RunwireRuntime> => {
+  const initialize = async (): Promise<RoutewireRuntime> => {
     const execSpec = await bridge.ready();
 
     let projectedTools = await discoverProjectedNativeTools(bridge);
@@ -144,7 +144,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
       codexHome: options.codexHome,
       codexCommand: options.codexCommand,
     });
-    if (closing) throw new Error("Runwire startup cancelled");
+    if (closing) throw new Error("Routewire startup cancelled");
     const collaborationTools = selectCollaborationTools(bridge.collaborationTools(), {
       allowedModels: allowedSubagentModels,
       catalog: modelCatalog,
@@ -159,7 +159,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
         const changed = projectedToolsFingerprint(tools) !== projectedToolsFingerprint(projectedTools);
         if (changed) {
           projectedTools = tools;
-          updateRunwireProjectedTools(mcpServer, tools);
+          updateRoutewireProjectedTools(mcpServer, tools);
           surface.updateProjectedTools(tools);
         }
         return projectedTools;
@@ -169,7 +169,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
       }).finally(() => {refresh = undefined;});
       return refresh;
     };
-    const mcpServer = createRunwireMcpServer({
+    const mcpServer = createRoutewireMcpServer({
       bridge, execSpec, projectedTools, nativeSkillTools, collaborationTools, onEvent: emit,
       refreshProjectedTools,
     });
@@ -197,7 +197,7 @@ export async function startRunwire(options: StartRunwireOptions): Promise<Runwir
       }
       if (closing) {
         await startupResult.handle.close();
-        throw new Error("Runwire startup cancelled");
+        throw new Error("Routewire startup cancelled");
       }
       tunnel = startupResult.handle;
       emit({
@@ -265,12 +265,12 @@ function codexExitedBeforeReady(exit: CodexExit): Error {
 
 function codexExitedDuringTunnelStartup(exit: CodexExit): Error {
   if (exit.error) {
-    return new Error(`Codex failed while Runwire was starting the tunnel: ${exit.error.message}`, {
+    return new Error(`Codex failed while Routewire was starting the tunnel: ${exit.error.message}`, {
       cause: exit.error,
     });
   }
   return new Error(
-    `Codex exited while Runwire was starting the tunnel (code=${String(exit.code)}, signal=${String(exit.signal)})`,
+    `Codex exited while Routewire was starting the tunnel (code=${String(exit.code)}, signal=${String(exit.signal)})`,
   );
 }
 

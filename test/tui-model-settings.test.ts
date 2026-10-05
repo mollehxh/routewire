@@ -5,11 +5,11 @@ import {PassThrough} from "node:stream";
 import {afterEach, describe, expect, it, vi} from "vitest";
 
 import type {CodexModelCatalogEntry} from "../src/model-catalog.js";
-import type {RunwireInkState} from "../src/tui-ink.js";
-import {RunwireTui} from "../src/tui.js";
-import {loadRunwireSettings, saveRunwireSettings, DEFAULT_RUNWIRE_SETTINGS} from "../src/tui-settings.js";
+import type {RoutewireInkState} from "../src/tui-ink.js";
+import {RoutewireTui} from "../src/tui.js";
+import {loadRoutewireSettings, saveRoutewireSettings, DEFAULT_ROUTEWIRE_SETTINGS} from "../src/tui-settings.js";
 
-const ink = vi.hoisted(() => ({props: undefined as undefined | {state: RunwireInkState; onKey(key: string): void}}));
+const ink = vi.hoisted(() => ({props: undefined as undefined | {state: RoutewireInkState; onKey(key: string): void}}));
 vi.mock("ink", async importOriginal => ({
   ...await importOriginal<typeof import("ink")>(),
   render: (element: {props: typeof ink.props}) => {
@@ -26,12 +26,12 @@ const cleanup: Array<() => void> = [];
 afterEach(() => {for (const dispose of cleanup.splice(0).reverse()) dispose(); vi.unstubAllEnvs();});
 
 function setup(loadModelCatalog: () => readonly CodexModelCatalogEntry[]) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-model-settings-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-model-settings-"));
   cleanup.push(() => fs.rmSync(dir, {recursive: true, force: true}));
   vi.stubEnv("XDG_CONFIG_HOME", dir);
-  saveRunwireSettings({...DEFAULT_RUNWIRE_SETTINGS, allowedSubagentModels: [sol.id, luna.id]});
+  saveRoutewireSettings({...DEFAULT_ROUTEWIRE_SETTINGS, allowedSubagentModels: [sol.id, luna.id]});
   const output = Object.assign(new PassThrough(), {isTTY: true}) as unknown as NodeJS.WriteStream;
-  const tui = new RunwireTui({cwd: dir, model: luna.id, modelCatalog: [luna], loadModelCatalog, output});
+  const tui = new RoutewireTui({cwd: dir, model: luna.id, modelCatalog: [luna], loadModelCatalog, output});
   tui.start();
   cleanup.push(() => tui.stop());
   return tui;
@@ -47,7 +47,7 @@ describe("saved subagent model selections", () => {
     expect(tui.settings().allowedSubagentModels).toEqual([sol.id, luna.id]);
     openCodexSettings();
     keys("j", "\r"); // Save fast mode while Sol is absent.
-    expect(loadRunwireSettings().allowedSubagentModels).toEqual([sol.id, luna.id]);
+    expect(loadRoutewireSettings().allowedSubagentModels).toEqual([sol.id, luna.id]);
     catalog = [luna, sol];
     keys("j", "\r"); // Refresh when opening model selections.
     expect(ink.props!.state.modelCatalog.find(entry => entry.id === sol.id)?.displayName).toBe("Sol");
@@ -61,8 +61,8 @@ describe("saved subagent model selections", () => {
     expect(ink.props!.state.modelCatalog.map(entry => entry.id)).toEqual([luna.id, sol.id]);
     keys(" "); // Remove Luna without deleting the absent Sol selection.
     expect(tui.settings().allowedSubagentModels).toEqual([sol.id]);
-    expect(loadRunwireSettings().allowedSubagentModels).toEqual([sol.id]);
+    expect(loadRoutewireSettings().allowedSubagentModels).toEqual([sol.id]);
     keys("j", " "); // Explicitly remove the absent selection.
-    expect(loadRunwireSettings().allowedSubagentModels).toEqual([]);
+    expect(loadRoutewireSettings().allowedSubagentModels).toEqual([]);
   });
 });

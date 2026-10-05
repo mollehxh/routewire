@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:http";
 
-import { runwireEnvFlag } from "../env.js";
+import { routewireEnvFlag } from "../env.js";
 import {
   isReasoningEffort,
   SUBAGENT_REASONING_EFFORTS,
@@ -69,9 +69,9 @@ export async function proxyChildRequest(
   });
 
   const responseBody = await upstream.text();
-  if (runwireEnvFlag("RUNWIRE_DEBUG", "SIDEBAND_DEBUG")) {
+  if (routewireEnvFlag("ROUTEWIRE_DEBUG", "SIDEBAND_DEBUG")) {
     process.stderr.write(
-      `[runwire] child upstream: ${JSON.stringify(lunaUpstreamSummary(upstream, responseBody))}\n`,
+      `[routewire] child upstream: ${JSON.stringify(lunaUpstreamSummary(upstream, responseBody))}\n`,
     );
   }
   if (upstream.ok && (isEventStream(upstream.headers.get("content-type")) || responseBody.includes("data:"))) {

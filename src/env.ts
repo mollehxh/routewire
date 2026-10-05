@@ -1,7 +1,7 @@
-export function runwireEnv(name: string, legacyName?: string): string | undefined {
+export function routewireEnv(name: string, legacyName?: string): string | undefined {
   return process.env[name] ?? (legacyName ? process.env[legacyName] : undefined);
 }
 
-export function runwireEnvFlag(name: string, legacyName?: string): boolean {
-  return runwireEnv(name, legacyName) === "1";
+export function routewireEnvFlag(name: string, legacyName?: string): boolean {
+  return routewireEnv(name, legacyName) === "1";
 }

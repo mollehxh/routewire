@@ -6,7 +6,7 @@ import spawn from "cross-spawn";
 import { z, type ZodType } from "zod";
 
 import type { CodexBridgeEvent, CodexTurnBridge } from "../bridge.js";
-import { RUNWIRE_NAME, RUNWIRE_TITLE, RUNWIRE_VERSION } from "../meta.js";
+import { ROUTEWIRE_NAME, ROUTEWIRE_TITLE, ROUTEWIRE_VERSION } from "../meta.js";
 import type { BridgeCallResult } from "../provider/protocol.js";
 
 export type NativeSkillTools =
@@ -26,14 +26,14 @@ export interface CodexSkillSummary {
   description: string;
 }
 
-export interface RunwireSkillToolDefinition {
+export interface RoutewireSkillToolDefinition {
   name: "skills" | "get_skill";
   title: string;
   description: string;
   inputSchema: ZodType;
 }
 
-export interface RunwireSkillToolOptions {
+export interface RoutewireSkillToolOptions {
   onEvent?: (event: CodexBridgeEvent) => void;
 }
 
@@ -54,7 +54,7 @@ const getSkillInputSchema = z.object({
     .describe("Exact enabled skill names returned by the skills tool."),
 });
 
-export const RUNWIRE_SKILL_TOOL_DEFINITIONS: RunwireSkillToolDefinition[] = [
+export const ROUTEWIRE_SKILL_TOOL_DEFINITIONS: RoutewireSkillToolDefinition[] = [
   {
     name: "skills",
     title: "Codex skills",
@@ -105,12 +105,12 @@ export async function discoverNativeSkillTools(
   return undefined;
 }
 
-export async function invokeRunwireSkillTool(
+export async function invokeRoutewireSkillTool(
   bridge: CodexTurnBridge,
   nativeTools: NativeSkillTools,
   name: "skills" | "get_skill",
   arguments_: unknown,
-  options: RunwireSkillToolOptions = {},
+  options: RoutewireSkillToolOptions = {},
 ): Promise<BridgeCallResult> {
   if (name === "skills") {
     return invokeSkills(bridge, nativeTools, skillsInputSchema.parse(arguments_));
@@ -118,11 +118,11 @@ export async function invokeRunwireSkillTool(
 
   const args = getSkillInputSchema.parse(arguments_);
   const startedAt = Date.now();
-  const callId = `runwire-skill-${++skillActivityCounter}`;
+  const callId = `routewire-skill-${++skillActivityCounter}`;
   options.onEvent?.({
     type: "call_started",
     callId,
-    namespace: "runwire",
+    namespace: "routewire",
     name: "get_skill",
     arguments: { names: [...new Set(args.names)] },
     startedAt,
@@ -133,7 +133,7 @@ export async function invokeRunwireSkillTool(
     options.onEvent?.({
       type: "call_finished",
       callId,
-      namespace: "runwire",
+      namespace: "routewire",
       name: "get_skill",
       isError: result.isError,
       durationMs: Date.now() - startedAt,
@@ -143,7 +143,7 @@ export async function invokeRunwireSkillTool(
     options.onEvent?.({
       type: "call_finished",
       callId,
-      namespace: "runwire",
+      namespace: "routewire",
       name: "get_skill",
       isError: true,
       durationMs: Date.now() - startedAt,
@@ -305,7 +305,7 @@ async function appServerSkillsList(
 
   try {
     await request(1, "initialize", {
-      clientInfo: { name: RUNWIRE_NAME, title: RUNWIRE_TITLE, version: RUNWIRE_VERSION },
+      clientInfo: { name: ROUTEWIRE_NAME, title: ROUTEWIRE_TITLE, version: ROUTEWIRE_VERSION },
       capabilities: { experimentalApi: true },
     });
     stdin.write(`${JSON.stringify({ method: "initialized" })}\n`);
@@ -503,7 +503,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function skillToolJsonSchema(
-  definition: RunwireSkillToolDefinition,
+  definition: RoutewireSkillToolDefinition,
 ): Record<string, unknown> {
   const schema = z.toJSONSchema(definition.inputSchema) as Record<string, unknown>;
   const { $schema: _schema, ...withoutDialect } = schema;

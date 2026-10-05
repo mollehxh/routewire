@@ -9,11 +9,11 @@ const mocks = vi.hoisted(() => ({spawn: vi.fn()}));
 vi.mock("cross-spawn", () => ({default: mocks.spawn}));
 
 import {
-  checkForRunwireUpdate,
-  createRunwireUpdateAction,
-  detectRunwirePackageManager,
-  installRunwireUpdate,
-  type RunwireUpdateInfo,
+  checkForRoutewireUpdate,
+  createRoutewireUpdateAction,
+  detectRoutewirePackageManager,
+  installRoutewireUpdate,
+  type RoutewireUpdateInfo,
 } from "../src/update.js";
 
 const cleanup: string[] = [];
@@ -39,14 +39,14 @@ class FakeChild extends EventEmitter {
   }
 }
 
-const update: RunwireUpdateInfo = {
+const update: RoutewireUpdateInfo = {
   currentVersion: "0.1.0",
   latestVersion: "0.2.0",
-  action: {command: "npm", args: ["install", "--global", "runwire@latest"], display: "npm install -g runwire@latest"},
+  action: {command: "npm", args: ["install", "--global", "routewire@latest"], display: "npm install -g routewire@latest"},
 };
 
 function tempCacheFile(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-update-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-update-"));
   cleanup.push(dir);
   return path.join(dir, "update-check.json");
 }
@@ -58,9 +58,9 @@ function registryResponse(version: string): Response {
   });
 }
 
-describe("Runwire update checks", () => {
+describe("Routewire update checks", () => {
   it("offers a newer npm release and pins the installer to latest", async () => {
-    const update = await checkForRunwireUpdate({
+    const update = await checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
       packageManager: "npm",
@@ -72,15 +72,15 @@ describe("Runwire update checks", () => {
       latestVersion: "0.2.0",
       action: {
         command: "npm",
-        args: ["install", "--global", "runwire@latest"],
-        display: "npm install -g runwire@latest",
+        args: ["install", "--global", "routewire@latest"],
+        display: "npm install -g routewire@latest",
       },
     });
   });
 
   it("does not offer the same or an older release", async () => {
     for (const latestVersion of ["0.1.0", "0.0.9"]) {
-      const update = await checkForRunwireUpdate({
+      const update = await checkForRoutewireUpdate({
         currentVersion: "0.1.0",
         cacheFile: tempCacheFile(),
         fetchImpl: async () => registryResponse(latestVersion),
@@ -97,8 +97,8 @@ describe("Runwire update checks", () => {
       return registryResponse("0.3.0");
     };
 
-    const first = await checkForRunwireUpdate({currentVersion: "0.1.0", cacheFile, fetchImpl, now: () => 10_000});
-    const second = await checkForRunwireUpdate({currentVersion: "0.1.0", cacheFile, fetchImpl, now: () => 10_500});
+    const first = await checkForRoutewireUpdate({currentVersion: "0.1.0", cacheFile, fetchImpl, now: () => 10_000});
+    const second = await checkForRoutewireUpdate({currentVersion: "0.1.0", cacheFile, fetchImpl, now: () => 10_500});
 
     expect(first?.latestVersion).toBe("0.3.0");
     expect(second?.latestVersion).toBe("0.3.0");
@@ -114,7 +114,7 @@ describe("Runwire update checks", () => {
         : registryResponse("0.3.0");
     });
 
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile,
       registry: "https://registry.example-a.test",
@@ -122,7 +122,7 @@ describe("Runwire update checks", () => {
       now: () => 10_000,
     })).resolves.toMatchObject({latestVersion: "0.2.0"});
 
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile,
       registry: "https://registry.example-b.test",
@@ -137,7 +137,7 @@ describe("Runwire update checks", () => {
     let latestVersion = "0.2.0";
     const fetchImpl = vi.fn(async () => registryResponse(latestVersion));
 
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile,
       cacheTtlMs: 3_600_000,
@@ -146,7 +146,7 @@ describe("Runwire update checks", () => {
     })).resolves.toMatchObject({latestVersion: "0.2.0"});
 
     latestVersion = "0.3.0";
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile,
       cacheTtlMs: 3_600_000,
@@ -157,7 +157,7 @@ describe("Runwire update checks", () => {
   });
 
   it("fails open when the registry cannot be reached", async () => {
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
       fetchImpl: async () => { throw new Error("offline"); },
@@ -165,12 +165,12 @@ describe("Runwire update checks", () => {
   });
 
   it("fails open for non-OK and malformed registry responses", async () => {
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
       fetchImpl: async () => new Response("not found", {status: 404}),
     })).resolves.toBeUndefined();
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
       fetchImpl: async () => new Response(JSON.stringify({version: "latest"}), {status: 200}),
@@ -178,9 +178,9 @@ describe("Runwire update checks", () => {
   });
 
   it("honors the documented update-check opt out without touching the registry", async () => {
-    vi.stubEnv("RUNWIRE_DISABLE_UPDATE_CHECK", "1");
+    vi.stubEnv("ROUTEWIRE_DISABLE_UPDATE_CHECK", "1");
     const fetchImpl = vi.fn();
-    await expect(checkForRunwireUpdate({
+    await expect(checkForRoutewireUpdate({
       currentVersion: "0.1.0",
       cacheFile: tempCacheFile(),
       fetchImpl,
@@ -189,45 +189,45 @@ describe("Runwire update checks", () => {
   });
 
   it("builds install commands for supported package managers", () => {
-    expect(createRunwireUpdateAction("pnpm").display).toBe("pnpm add -g runwire@latest");
-    expect(createRunwireUpdateAction("yarn").display).toBe("yarn global add runwire@latest");
-    expect(createRunwireUpdateAction("bun").display).toBe("bun add -g runwire@latest");
+    expect(createRoutewireUpdateAction("pnpm").display).toBe("pnpm add -g routewire@latest");
+    expect(createRoutewireUpdateAction("yarn").display).toBe("yarn global add routewire@latest");
+    expect(createRoutewireUpdateAction("bun").display).toBe("bun add -g routewire@latest");
   });
 
   it("detects the package manager from runtime hints", () => {
     vi.stubEnv("npm_config_user_agent", "pnpm/10.0.0 npm/? node/v24");
-    expect(detectRunwirePackageManager()).toBe("pnpm");
+    expect(detectRoutewirePackageManager()).toBe("pnpm");
 
     vi.stubEnv("npm_config_user_agent", "yarn/1.22.22 npm/? node/v24");
-    expect(detectRunwirePackageManager()).toBe("yarn");
+    expect(detectRoutewirePackageManager()).toBe("yarn");
 
     vi.stubEnv("npm_config_user_agent", "yarn/4.9.2 npm/? node/v24");
-    expect(detectRunwirePackageManager()).toBe("npm");
+    expect(detectRoutewirePackageManager()).toBe("npm");
 
     vi.stubEnv("npm_config_user_agent", "bun/1.3.0 npm/? node/v24");
-    expect(detectRunwirePackageManager()).toBe("bun");
+    expect(detectRoutewirePackageManager()).toBe("bun");
 
     vi.stubEnv("npm_config_user_agent", "");
-    process.argv[1] = "/tmp/pnpm/global/5/.pnpm/runwire@0.2.0/node_modules/runwire/dist/cli.js";
-    expect(detectRunwirePackageManager()).toBe("pnpm");
+    process.argv[1] = "/tmp/pnpm/global/5/.pnpm/routewire@0.2.0/node_modules/routewire/dist/cli.js";
+    expect(detectRoutewirePackageManager()).toBe("pnpm");
 
-    process.argv[1] = "/tmp/node_modules/runwire/dist/cli.js";
-    expect(detectRunwirePackageManager()).toBe("npm");
+    process.argv[1] = "/tmp/node_modules/routewire/dist/cli.js";
+    expect(detectRoutewirePackageManager()).toBe("npm");
   });
 });
 
-describe("Runwire update installer", () => {
+describe("Routewire update installer", () => {
   it("does not spawn when cancellation happened before the installer starts", async () => {
     const controller = new AbortController();
     controller.abort();
-    await expect(installRunwireUpdate(update, {signal: controller.signal})).rejects.toThrow("Update cancelled");
+    await expect(installRoutewireUpdate(update, {signal: controller.signal})).rejects.toThrow("Update cancelled");
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
   it("resolves when the package manager exits successfully", async () => {
     const child = new FakeChild();
     mocks.spawn.mockReturnValue(child);
-    const result = installRunwireUpdate(update);
+    const result = installRoutewireUpdate(update);
     child.emit("close", 0);
     await expect(result).resolves.toBeUndefined();
     expect(child.kill).not.toHaveBeenCalled();
@@ -236,7 +236,7 @@ describe("Runwire update installer", () => {
   it("surfaces the final package-manager error line on a nonzero exit", async () => {
     const child = new FakeChild();
     mocks.spawn.mockReturnValue(child);
-    const result = installRunwireUpdate(update);
+    const result = installRoutewireUpdate(update);
     child.stderr.write("npm error first line\nnpm error permission denied\n");
     child.emit("close", 1);
     await expect(result).rejects.toThrow("npm error permission denied");
@@ -245,7 +245,7 @@ describe("Runwire update installer", () => {
   it("rejects a process spawn error", async () => {
     const child = new FakeChild();
     mocks.spawn.mockReturnValue(child);
-    const result = installRunwireUpdate(update);
+    const result = installRoutewireUpdate(update);
     child.emit("error", new Error("spawn ENOENT"));
     await expect(result).rejects.toThrow("spawn ENOENT");
   });
@@ -255,10 +255,10 @@ describe("Runwire update installer", () => {
     const processKill = vi.spyOn(process, "kill").mockImplementation(() => true);
     const child = new FakeChild(42_424);
     mocks.spawn.mockReturnValue(child);
-    const result = installRunwireUpdate(update, {timeoutMs: 50});
+    const result = installRoutewireUpdate(update, {timeoutMs: 50});
     const rejection = expect(result).rejects.toThrow("Update timed out after 50ms");
     await vi.advanceTimersByTimeAsync(50);
-    expect(mocks.spawn).toHaveBeenCalledWith("npm", ["install", "--global", "runwire@latest"], {
+    expect(mocks.spawn).toHaveBeenCalledWith("npm", ["install", "--global", "routewire@latest"], {
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
@@ -275,7 +275,7 @@ describe("Runwire update installer", () => {
     const child = new FakeChild();
     mocks.spawn.mockReturnValue(child);
     const controller = new AbortController();
-    const result = installRunwireUpdate(update, {signal: controller.signal});
+    const result = installRoutewireUpdate(update, {signal: controller.signal});
     controller.abort();
     expect(child.kill).toHaveBeenCalledWith("SIGTERM");
     child.emit("close", null, "SIGTERM");
@@ -294,7 +294,7 @@ describe("Runwire update installer", () => {
       .mockReturnValueOnce(taskkillTerm)
       .mockReturnValueOnce(taskkillForce);
 
-    const result = installRunwireUpdate(update, {timeoutMs: 50});
+    const result = installRoutewireUpdate(update, {timeoutMs: 50});
     const rejection = expect(result).rejects.toThrow("Update timed out after 50ms");
     await vi.advanceTimersByTimeAsync(50);
     expect(mocks.spawn).toHaveBeenNthCalledWith(2, "taskkill", ["/pid", "51515", "/t"], {

@@ -1,17 +1,17 @@
 {
-  "name": "runwire",
+  "name": "routewire",
   "version": "0.1.0",
   "description": "Bridge a live local Codex tool surface into ChatGPT over MCP.",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mollehxh/runwire.git"
+    "url": "git+https://github.com/mollehxh/routewire.git"
   },
   "bugs": {
-    "url": "https://github.com/mollehxh/runwire/issues"
+    "url": "https://github.com/mollehxh/routewire/issues"
   },
-  "homepage": "https://github.com/mollehxh/runwire#readme",
+  "homepage": "https://github.com/mollehxh/routewire#readme",
   "keywords": [
     "mcp",
     "codex",
@@ -29,7 +29,7 @@
     "SECURITY.md"
   ],
   "bin": {
-    "runwire": "dist/cli.js"
+    "routewire": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

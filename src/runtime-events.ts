@@ -1,14 +1,14 @@
 import type { CodexBridgeEvent } from "./bridge.js";
 
-export type RunwireRuntimeComponent = "mcp" | "codex" | "tunnel";
-export type RunwireRuntimeComponentState = "starting" | "ready" | "stopped" | "error";
+export type RoutewireRuntimeComponent = "mcp" | "codex" | "tunnel";
+export type RoutewireRuntimeComponentState = "starting" | "ready" | "stopped" | "error";
 
-export type RunwireRuntimeEvent =
+export type RoutewireRuntimeEvent =
   | CodexBridgeEvent
   | {
       type: "component";
-      component: RunwireRuntimeComponent;
-      state: RunwireRuntimeComponentState;
+      component: RoutewireRuntimeComponent;
+      state: RoutewireRuntimeComponentState;
       detail?: string;
     };
 

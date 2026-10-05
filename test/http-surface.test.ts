@@ -8,10 +8,10 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
-import { RunwireHttpSurface } from "../src/http-surface.js";
-import { RUNWIRE_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
+import { RoutewireHttpSurface } from "../src/http-surface.js";
+import { ROUTEWIRE_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
 import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
-import { createRunwireMcpServer } from "../src/mcp/server.js";
+import { createRoutewireMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
 
 const closers: Array<() => Promise<void>> = [];
@@ -52,11 +52,11 @@ function initialRequest() {
   };
 }
 
-describe("RunwireHttpSurface", () => {
+describe("RoutewireHttpSurface", () => {
   it("releases the HTTP listener even when MCP cleanup fails", async () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
     bridge.acceptModelRequest(initialRequest(), () => undefined);
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
     const origin = surface.origin;
     const failure = new Error("transport cleanup failed");
@@ -70,7 +70,7 @@ describe("RunwireHttpSurface", () => {
 
   it("bounds shutdown when a client leaves its request body incomplete", async () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
     const origin = surface.origin;
     const socket = createConnection(Number(new URL(origin).port), "127.0.0.1");
@@ -91,12 +91,12 @@ describe("RunwireHttpSurface", () => {
 
   it("rejects non-loopback binds", () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
-    expect(() => new RunwireHttpSurface({ bridge, host: "0.0.0.0" })).toThrow(/loopback/i);
+    expect(() => new RoutewireHttpSurface({ bridge, host: "0.0.0.0" })).toThrow(/loopback/i);
   });
 
   it("protects the internal Responses provider from non-local browser origins", async () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
     closers.push(() => surface.close());
 
@@ -120,12 +120,12 @@ describe("RunwireHttpSurface", () => {
     });
     const execSpec = await bridge.ready();
 
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
-    surface.setMcpServer(createRunwireMcpServer({ bridge, execSpec }), execSpec);
+    surface.setMcpServer(createRoutewireMcpServer({ bridge, execSpec }), execSpec);
     closers.push(() => surface.close());
 
-    const client = new Client({ name: "runwire-http-test", version: "0.0.0" });
+    const client = new Client({ name: "routewire-http-test", version: "0.0.0" });
     const transport = new StreamableHTTPClientTransport(new URL(surface.mcpUrl));
     await client.connect(transport);
     closers.push(async () => client.close());
@@ -175,7 +175,7 @@ describe("RunwireHttpSurface", () => {
     const projectedTools = selectProjectedNativeTools([
       { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
     ]);
-    const root = await mkdtemp(join(tmpdir(), "runwire-http-skills-"));
+    const root = await mkdtemp(join(tmpdir(), "routewire-http-skills-"));
     const skillRoot = join(root, "skills");
     const skillDir = join(skillRoot, "alpha");
     await mkdir(skillDir, { recursive: true });
@@ -186,10 +186,10 @@ describe("RunwireHttpSurface", () => {
     );
     const nativeSkillTools = { kind: "local" as const, roots: [skillRoot] };
 
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
     surface.setMcpServer(
-      createRunwireMcpServer({ bridge, execSpec, projectedTools, nativeSkillTools }),
+      createRoutewireMcpServer({ bridge, execSpec, projectedTools, nativeSkillTools }),
       execSpec,
       projectedTools,
       nativeSkillTools,
@@ -205,7 +205,7 @@ describe("RunwireHttpSurface", () => {
     });
     const meta = {
       "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-      "io.modelcontextprotocol/clientInfo": { name: "runwire-test", version: "1" },
+      "io.modelcontextprotocol/clientInfo": { name: "routewire-test", version: "1" },
       "io.modelcontextprotocol/clientCapabilities": {},
     };
 
@@ -227,7 +227,7 @@ describe("RunwireHttpSurface", () => {
         resultType: "complete",
         supportedVersions: ["2026-07-28"],
         capabilities: { tools: {} },
-        instructions: RUNWIRE_MCP_INSTRUCTIONS,
+        instructions: ROUTEWIRE_MCP_INSTRUCTIONS,
         ttlMs: 0,
         cacheScope: "private",
       },
@@ -457,10 +457,10 @@ describe("RunwireHttpSurface", () => {
       { name: "exec_command", description: "LIVE DIRECT EXEC DESCRIPTION" },
     ]);
 
-    const surface = new RunwireHttpSurface({ bridge });
+    const surface = new RoutewireHttpSurface({ bridge });
     await surface.start();
     surface.setMcpServer(
-      createRunwireMcpServer({ bridge, execSpec, projectedTools }),
+      createRoutewireMcpServer({ bridge, execSpec, projectedTools }),
       execSpec,
       projectedTools,
     );
@@ -488,7 +488,7 @@ describe("RunwireHttpSurface", () => {
           arguments: { cmd: "printf CANCEL_MODERN" },
           _meta: {
             "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-            "io.modelcontextprotocol/clientInfo": { name: "runwire-test", version: "1" },
+            "io.modelcontextprotocol/clientInfo": { name: "routewire-test", version: "1" },
             "io.modelcontextprotocol/clientCapabilities": {},
           },
         },

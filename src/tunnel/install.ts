@@ -139,14 +139,14 @@ function defaultCacheDir(platform: NodeJS.Platform): string {
   if (platform === "win32") {
     return path.join(
       process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local"),
-      "runwire",
+      "routewire",
       "cache",
     );
   }
   if (platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Caches", "runwire");
+    return path.join(os.homedir(), "Library", "Caches", "routewire");
   }
-  return path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "runwire");
+  return path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "routewire");
 }
 
 function checksumForArchive(manifest: string, filename: string): string | undefined {

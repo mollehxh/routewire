@@ -6,9 +6,9 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CodexTurnBridge } from "../src/bridge.js";
-import { RUNWIRE_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
+import { ROUTEWIRE_MCP_INSTRUCTIONS } from "../src/mcp/instructions.js";
 import { selectProjectedNativeTools } from "../src/mcp/projected-tools.js";
-import { createRunwireMcpServer } from "../src/mcp/server.js";
+import { createRoutewireMcpServer } from "../src/mcp/server.js";
 import type { ProviderReply } from "../src/provider/protocol.js";
 
 const resources: Array<{ close(): Promise<void> | void }> = [];
@@ -83,7 +83,7 @@ function requestWithContext() {
   };
 }
 
-describe("Runwire MCP server", () => {
+describe("Routewire MCP server", () => {
   it("publishes Codex's captured exec description and forwards MCP calls into the waiting Codex turn", async () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
     let providerReply: ProviderReply | undefined;
@@ -92,15 +92,15 @@ describe("Runwire MCP server", () => {
     });
     const execSpec = await bridge.ready();
 
-    const server = createRunwireMcpServer({ bridge, execSpec });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
 
     await server.connect(serverTransport);
     await client.connect(clientTransport);
 
-    expect(client.getInstructions()).toBe(RUNWIRE_MCP_INSTRUCTIONS);
+    expect(client.getInstructions()).toBe(ROUTEWIRE_MCP_INSTRUCTIONS);
     expect(client.getInstructions()).toContain("$skills");
     expect(client.getInstructions()).toContain("get_skill");
 
@@ -159,8 +159,8 @@ describe("Runwire MCP server", () => {
       },
     ]);
 
-    const server = createRunwireMcpServer({ bridge, execSpec, projectedTools });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
     await server.connect(serverTransport);
@@ -225,8 +225,8 @@ describe("Runwire MCP server", () => {
         description: "CUA",
       },
     ]);
-    const server = createRunwireMcpServer({ bridge, execSpec, projectedTools });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
     await server.connect(serverTransport);
@@ -245,7 +245,7 @@ describe("Runwire MCP server", () => {
           { type: "input_text", text: "Script failed\nWall time 1.0 seconds\nOutput:\n" },
           { type: "input_text", text: "Wall time: 0.0125 seconds\nOutput:" },
           { type: "input_text", text: '{"error":{"code":"tool_unavailable"},"ok":false}' },
-          { type: "input_text", text: "__RUNWIRE_PROJECTED_NATIVE_ERROR__" },
+          { type: "input_text", text: "__ROUTEWIRE_PROJECTED_NATIVE_ERROR__" },
         ],
       }),
       () => undefined,
@@ -269,8 +269,8 @@ describe("Runwire MCP server", () => {
     const projectedTools = selectProjectedNativeTools([
       { name: "apply_patch", description: "PATCH" },
     ]);
-    const server = createRunwireMcpServer({ bridge, execSpec, projectedTools });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec, projectedTools });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
     await server.connect(serverTransport);
@@ -300,7 +300,7 @@ describe("Runwire MCP server", () => {
   });
 
   it("exposes skills/get_skill from the local Codex skill resolver", async () => {
-    const root = await mkdtemp(join(tmpdir(), "runwire-mcp-skills-"));
+    const root = await mkdtemp(join(tmpdir(), "routewire-mcp-skills-"));
     const skillRoot = join(root, "skills");
     const skillDir = join(skillRoot, "alpha");
     await mkdir(skillDir, { recursive: true });
@@ -315,8 +315,8 @@ describe("Runwire MCP server", () => {
     const execSpec = await bridge.ready();
     const nativeSkillTools = { kind: "local" as const, roots: [skillRoot] };
 
-    const server = createRunwireMcpServer({ bridge, execSpec, nativeSkillTools });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec, nativeSkillTools });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
     await server.connect(serverTransport);
@@ -353,8 +353,8 @@ describe("Runwire MCP server", () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
     bridge.acceptModelRequest(requestWithContext(), () => undefined);
     const execSpec = await bridge.ready();
-    const server = createRunwireMcpServer({ bridge, execSpec });
-    const client = new Client({ name: "runwire-test", version: "0.0.0" });
+    const server = createRoutewireMcpServer({ bridge, execSpec });
+    const client = new Client({ name: "routewire-test", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     resources.push(client, server);
     await server.connect(serverTransport);

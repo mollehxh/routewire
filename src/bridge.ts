@@ -102,7 +102,7 @@ export class CodexTurnBridge {
   }
 
   operationalContext(): CodexOperationalContext {
-    if (this.#closed) throw new Error("Runwire bridge is closed");
+    if (this.#closed) throw new Error("Routewire bridge is closed");
     if (!this.#operationalContext) {
       throw new Error("Codex operational context is not available yet");
     }
@@ -126,7 +126,7 @@ export class CodexTurnBridge {
   }
 
   acceptModelRequest(body: unknown, respond: ProviderResponder): void {
-    if (this.#closed) throw new Error("Runwire bridge is closed");
+    if (this.#closed) throw new Error("Routewire bridge is closed");
     if (!isRecord(body)) throw new Error("Codex provider request must be an object");
     if (body.model !== this.#model) {
       const error = new Error(`Expected Codex model ${this.#model}, received ${String(body.model)}`);
@@ -164,18 +164,18 @@ export class CodexTurnBridge {
     if (this.#pendingModelReply) {
       if (requestFingerprint === this.#pendingModelRequestFingerprint) {
         // Codex reconnects and retries the same Responses request if the SSE
-        // stream disappears while Runwire is waiting for ChatGPT's next MCP
+        // stream disappears while Routewire is waiting for ChatGPT's next MCP
         // call. Rebind the pending reply to the newest stream instead of
         // treating the retry as a concurrent model request.
         this.#pendingModelReply = respond;
         return;
       }
-      throw new Error("Codex opened a second model request before Runwire answered the first");
+      throw new Error("Codex opened a second model request before Routewire answered the first");
     }
 
     if (this.#activeCall) {
       if (requestFingerprint === this.#activeCall.requestFingerprint) {
-        // The previous stream may have disappeared after Runwire emitted the
+        // The previous stream may have disappeared after Routewire emitted the
         // tool call but before Codex accepted the completed response. Replay
         // the exact same call id/input on the retried request so the bridge
         // remains idempotent from Codex's point of view.
@@ -226,7 +226,7 @@ export class CodexTurnBridge {
   }
 
   invokeExec(code: string, options: BridgeCallOptions = {}): Promise<BridgeCallResult> {
-    if (this.#closed) return Promise.reject(new Error("Runwire bridge is closed"));
+    if (this.#closed) return Promise.reject(new Error("Routewire bridge is closed"));
     if (!this.#execSpec) return Promise.reject(new Error("Codex tool surface is not ready yet"));
     if (options.signal?.aborted) return Promise.reject(callCancellationError(options.signal.reason));
     if (this.#activeCall) return Promise.reject(new Error("A Codex tool call is already active"));
@@ -234,7 +234,7 @@ export class CodexTurnBridge {
       return Promise.reject(new Error("Codex is not currently waiting for a model response"));
     }
 
-    const callId = `runwire-${++this.#callCounter}`;
+    const callId = `routewire-${++this.#callCounter}`;
     const respond = this.#pendingModelReply;
     const requestFingerprint = this.#pendingModelRequestFingerprint;
     this.#pendingModelReply = undefined;
@@ -311,7 +311,7 @@ export class CodexTurnBridge {
     arguments_: Record<string, unknown>,
     options: BridgeCallOptions = {},
   ): Promise<BridgeCallResult> {
-    if (this.#closed) return Promise.reject(new Error("Runwire bridge is closed"));
+    if (this.#closed) return Promise.reject(new Error("Routewire bridge is closed"));
     if (options.signal?.aborted) return Promise.reject(callCancellationError(options.signal.reason));
     if (this.#activeCall) return Promise.reject(new Error("A Codex tool call is already active"));
     if (!this.#pendingModelReply) {
@@ -324,7 +324,7 @@ export class CodexTurnBridge {
       return Promise.reject(new Error(`Codex collaboration tool is not available: ${name}`));
     }
 
-    const callId = `runwire-${++this.#callCounter}`;
+    const callId = `routewire-${++this.#callCounter}`;
     const respond = this.#pendingModelReply;
     const requestFingerprint = this.#pendingModelRequestFingerprint;
     this.#pendingModelReply = undefined;
@@ -395,7 +395,7 @@ export class CodexTurnBridge {
     });
   }
 
-  close(reason = "Runwire bridge closed"): void {
+  close(reason = "Routewire bridge closed"): void {
     if (this.#closed) return;
     this.#closed = true;
 

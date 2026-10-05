@@ -1,11 +1,11 @@
-# Runwire
+# Routewire
 
-Runwire exposes the live model-facing tool surface of a local Codex turn as an
+Routewire exposes the live model-facing tool surface of a local Codex turn as an
 MCP server. ChatGPT can remain the reasoning model while Codex executes the
 same local tools, skills, Browser/Computer Use runtimes, and subagent surface
 available to that turn.
 
-Runwire is local-first: the HTTP/MCP surface binds to loopback only unless you
+Routewire is local-first: the HTTP/MCP surface binds to loopback only unless you
 explicitly connect it through the OpenAI Secure MCP Tunnel.
 
 ## Requirements
@@ -16,36 +16,36 @@ explicitly connect it through the OpenAI Secure MCP Tunnel.
 ## Install
 
 ```bash
-npm install --global runwire
-runwire
+npm install --global routewire
+routewire
 ```
 
 You can also run it without a global install:
 
 ```bash
-npx runwire
+npx routewire
 ```
 
-Runwire starts the interactive TUI when attached to a terminal. In headless
+Routewire starts the interactive TUI when attached to a terminal. In headless
 mode it prints the local MCP and provider endpoints.
 
 ## Updates
 
-Interactive Runwire checks npm for a newer release at startup. The check is
+Interactive Routewire checks npm for a newer release at startup. The check is
 non-blocking, cached for one hour, and fails open when the registry is
-unavailable. When an update exists, Runwire offers two choices before the main
+unavailable. When an update exists, Routewire offers two choices before the main
 menu: install the latest release now or continue with the current version.
 
-Continuing does not suppress the release, so Runwire offers the same update
+Continuing does not suppress the release, so Routewire offers the same update
 again on a later launch while the installed version is still outdated. Update
 installation uses the detected npm-compatible package manager and can be
-cancelled by quitting Runwire. Set `RUNWIRE_DISABLE_UPDATE_CHECK=1` to disable
+cancelled by quitting Routewire. Set `ROUTEWIRE_DISABLE_UPDATE_CHECK=1` to disable
 the startup check entirely.
 
 ## Usage
 
 ```text
-runwire [options]
+routewire [options]
 
 Options:
   --host <host>           Loopback bind address (default: 127.0.0.1)
@@ -57,15 +57,15 @@ Options:
                            Runtime API key file
   --tunnel-client <path>  Override the pinned auto-downloaded tunnel-client
   --danger-full-access    Start Codex with no approvals or filesystem sandbox
-  -v, --version           Show the Runwire version
+  -v, --version           Show the Routewire version
   -h, --help              Show help
 ```
 
-By default Runwire:
+By default Routewire:
 
 - binds to `127.0.0.1` on an available port;
 - starts an ephemeral `codex exec` turn;
-- points that turn at Runwire's local Responses-compatible provider bridge;
+- points that turn at Routewire's local Responses-compatible provider bridge;
 - preserves the user's normal Codex configuration and plugins;
 - discovers the live Codex tool surface instead of maintaining a separate copy;
 - exposes compatible native tools and skills through MCP;
@@ -76,48 +76,48 @@ By default Runwire:
 
 For Codex-style agent behavior in ChatGPT, copy
 [`CHATGPT_PROJECT_INSTRUCTIONS.md`](./CHATGPT_PROJECT_INSTRUCTIONS.md) into
-the ChatGPT Project Instructions field. Runwire's MCP instructions add the
+the ChatGPT Project Instructions field. Routewire's MCP instructions add the
 runtime-specific bootstrap, skill-loading, and tool-selection workflow.
 
 ## OpenAI Secure MCP Tunnel
 
-Set a tunnel ID to connect Runwire's local MCP surface through the official
+Set a tunnel ID to connect Routewire's local MCP surface through the official
 OpenAI tunnel client:
 
 ```bash
-export RUNWIRE_TUNNEL_ID=tunnel_...
+export ROUTEWIRE_TUNNEL_ID=tunnel_...
 export CONTROL_PLANE_API_KEY=<runtime-key-with-tunnel-permissions>
-runwire
+routewire
 ```
 
 A file-backed runtime key is also supported:
 
 ```bash
-runwire \
+routewire \
   --tunnel-id tunnel_... \
   --tunnel-api-key-file /path/to/runtime-api-key
 ```
 
-If `--tunnel-client` is not supplied, Runwire downloads the pinned official
+If `--tunnel-client` is not supplied, Routewire downloads the pinned official
 tunnel client on first use, verifies the release checksums, and caches the
-verified executable under the user's Runwire cache directory.
+verified executable under the user's Routewire cache directory.
 
 For migration from the old project name, `SIDEBAND_TUNNEL_ID`,
 `SIDEBAND_TUNNEL_API_KEY_FILE`, `SIDEBAND_TUNNEL_CLIENT`, and
-`SIDEBAND_DEBUG` are still accepted when the corresponding `RUNWIRE_*`
+`SIDEBAND_DEBUG` are still accepted when the corresponding `ROUTEWIRE_*`
 variable is not set.
 
 ## Browser and Computer Use
 
-Runwire does not reimplement Browser Use or Computer Use. When the live Codex
+Routewire does not reimplement Browser Use or Computer Use. When the live Codex
 turn exposes `node_repl`, `cua_repl`, or compatible plugin-prefixed tools,
-Runwire projects those native tools through the MCP surface.
+Routewire projects those native tools through the MCP surface.
 
 Some native runtimes require broader Codex permissions. For explicit trusted
 local testing only:
 
 ```bash
-runwire --danger-full-access
+routewire --danger-full-access
 ```
 
 That passes Codex's dangerous full-access mode to the child process and
@@ -128,7 +128,7 @@ therefore disables its normal approval prompts and sandboxing.
 Enable metadata-only provider diagnostics with:
 
 ```bash
-RUNWIRE_DEBUG=1 runwire
+ROUTEWIRE_DEBUG=1 routewire
 ```
 
 The debug log reports provider request sequencing and response metadata. It
@@ -138,8 +138,8 @@ credentials.
 ## Development
 
 ```bash
-git clone https://github.com/mollehxh/runwire.git
-cd runwire
+git clone https://github.com/mollehxh/routewire.git
+cd routewire
 npm ci
 npm run typecheck
 npm test
@@ -156,7 +156,7 @@ The normal test suite is hermetic. An opt-in live smoke test is available for
 a configured Codex installation:
 
 ```bash
-RUNWIRE_REAL_CODEX=1 npm test -- test/real-runtime-smoke.test.ts
+ROUTEWIRE_REAL_CODEX=1 npm test -- test/real-runtime-smoke.test.ts
 ```
 
 ## Security

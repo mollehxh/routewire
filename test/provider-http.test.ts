@@ -143,7 +143,7 @@ describe("Responses-compatible provider HTTP surface", () => {
     expect(rejected.status).toBe(200);
     expect(rejected.headers.get("content-type")).toContain("text/event-stream");
     expect(rejectedSse).toContain("event: response.failed");
-    expect(rejectedSse).toContain('"code":"runwire_bridge_error"');
+    expect(rejectedSse).toContain('"code":"routewire_bridge_error"');
     expect(rejectedSse).toContain("second model request");
 
     bridge.close("test complete");

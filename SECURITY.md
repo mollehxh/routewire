@@ -12,7 +12,7 @@ impact.
 
 ## Security model
 
-Runwire binds its local HTTP/MCP surface to loopback addresses only. Native
+Routewire binds its local HTTP/MCP surface to loopback addresses only. Native
 Codex tools still run under the Codex sandbox and approval policy selected by
 the user. The `--danger-full-access` option deliberately bypasses those
 protections and should be used only in trusted local environments.

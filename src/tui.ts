@@ -5,21 +5,21 @@ import {
   catalogEntry,
   type CodexModelCatalogEntry,
 } from "./model-catalog.js";
-import type { RunwireRuntimeEvent } from "./runtime-events.js";
-import {RunwireInkApp, type RunwireInkState} from "./tui-ink.js";
-import type {RunwireUpdateInfo} from "./update.js";
+import type { RoutewireRuntimeEvent } from "./runtime-events.js";
+import {RoutewireInkApp, type RoutewireInkState} from "./tui-ink.js";
+import type {RoutewireUpdateInfo} from "./update.js";
 import {
   hasStoredApiKey,
-  loadRunwireSettings,
+  loadRoutewireSettings,
   saveApiKey,
-  saveRunwireSettings,
-  type RunwireSettings,
+  saveRoutewireSettings,
+  type RoutewireSettings,
 } from "./tui-settings.js";
 
 const CSI = "\u001b[";
 const RESET = `${CSI}0m`;
 
-export type RunwireRuntimeState = "stopped" | "starting" | "running" | "stopping" | "error";
+export type RoutewireRuntimeState = "stopped" | "starting" | "running" | "stopping" | "error";
 type View =
   | "update_check"
   | "update"
@@ -70,30 +70,30 @@ interface AgentActivity {
   durationMs?: number;
 }
 
-export interface RunwireTuiOptions {
+export interface RoutewireTuiOptions {
   cwd: string;
   model: string;
   modelCatalog: readonly CodexModelCatalogEntry[];
   loadModelCatalog?: () => readonly CodexModelCatalogEntry[];
-  initialSettings?: Partial<RunwireSettings>;
+  initialSettings?: Partial<RoutewireSettings>;
   externalApiKey?: boolean;
   output?: NodeJS.WriteStream;
   input?: NodeJS.ReadStream;
-  onStart?: (settings: RunwireSettings) => void;
+  onStart?: (settings: RoutewireSettings) => void;
   onStop?: () => void;
   onQuit?: () => void;
   checkingForUpdate?: boolean;
   onUpdate?: () => void;
 }
 
-export class RunwireTui {
+export class RoutewireTui {
   readonly #cwd: string;
   readonly #model: string;
   #modelCatalog: readonly CodexModelCatalogEntry[];
   readonly #loadModelCatalog?: () => readonly CodexModelCatalogEntry[];
   readonly #output: NodeJS.WriteStream;
   readonly #input: NodeJS.ReadStream;
-  readonly #onStart?: (settings: RunwireSettings) => void;
+  readonly #onStart?: (settings: RoutewireSettings) => void;
   readonly #onStop?: () => void;
   readonly #onQuit?: () => void;
   readonly #onUpdate?: () => void;
@@ -101,9 +101,9 @@ export class RunwireTui {
   readonly #active = new Map<string, Activity>();
   readonly #recent: Activity[] = [];
   readonly #agents = new Map<string, AgentActivity>();
-  readonly #settings: RunwireSettings;
+  readonly #settings: RoutewireSettings;
   #apiKeyConfigured: boolean;
-  #runtimeState: RunwireRuntimeState = "stopped";
+  #runtimeState: RoutewireRuntimeState = "stopped";
   #runtimeMessage = "";
   #appliedSettings = "";
   #credentialDirty = false;
@@ -113,9 +113,9 @@ export class RunwireTui {
   #inputBuffer = "";
   #started = false;
   #ink?: InkInstance;
-  #update?: RunwireInkState["update"];
+  #update?: RoutewireInkState["update"];
 
-  constructor(options: RunwireTuiOptions) {
+  constructor(options: RoutewireTuiOptions) {
     this.#cwd = options.cwd;
     this.#model = options.model;
     this.#modelCatalog = options.modelCatalog;
@@ -126,7 +126,7 @@ export class RunwireTui {
     this.#onStop = options.onStop;
     this.#onQuit = options.onQuit;
     this.#onUpdate = options.onUpdate;
-    const storedSettings = loadRunwireSettings();
+    const storedSettings = loadRoutewireSettings();
     this.#settings = normalizeSettings({
       ...storedSettings,
       ...options.initialSettings,
@@ -137,11 +137,11 @@ export class RunwireTui {
     if (options.checkingForUpdate) this.#view = "update_check";
   }
 
-  settings(): RunwireSettings {
+  settings(): RoutewireSettings {
     return structuredClone(this.#settings);
   }
 
-  setRuntimeState(state: RunwireRuntimeState, message = ""): void {
+  setRuntimeState(state: RoutewireRuntimeState, message = ""): void {
     if (state === "starting" && this.#runtimeState !== "starting") {
       this.#components.clear();
       this.#active.clear();
@@ -163,7 +163,7 @@ export class RunwireTui {
     this.render();
   }
 
-  showAvailableUpdate(update: RunwireUpdateInfo): void {
+  showAvailableUpdate(update: RoutewireUpdateInfo): void {
     if (this.#view !== "update_check") return;
     if (!this.#onUpdate) {
       this.finishUpdateCheck();
@@ -187,7 +187,7 @@ export class RunwireTui {
     this.render();
   }
 
-  handle(event: RunwireRuntimeEvent): void {
+  handle(event: RoutewireRuntimeEvent): void {
     if (event.type === "component") {
       this.#components.set(event.component, event.state);
       this.render();
@@ -320,7 +320,7 @@ export class RunwireTui {
     this.#output.write(`${CSI}?1049h${CSI}?25l${CSI}2J${CSI}H`);
     process.on("exit", this.#restoreTerminal);
     this.#ink = renderInk(
-      createElement(RunwireInkApp, {state: this.#snapshot(), onKey: this.#onInkKey}),
+      createElement(RoutewireInkApp, {state: this.#snapshot(), onKey: this.#onInkKey}),
       {
         stdout: this.#output,
         stdin: this.#input,
@@ -345,7 +345,7 @@ export class RunwireTui {
   render(): void {
     if (!this.#started || !this.#output.isTTY) return;
     this.#ink?.rerender(
-      createElement(RunwireInkApp, {state: this.#snapshot(), onKey: this.#onInkKey}),
+      createElement(RoutewireInkApp, {state: this.#snapshot(), onKey: this.#onInkKey}),
     );
   }
 
@@ -360,7 +360,7 @@ export class RunwireTui {
     if (this.#output.isTTY) this.#output.write(`${RESET}${CSI}?25h${CSI}?1049l`);
   };
 
-  #snapshot(): RunwireInkState {
+  #snapshot(): RoutewireInkState {
     return {
       cwd: this.#cwd,
       model: this.#model,
@@ -576,7 +576,7 @@ export class RunwireTui {
 
   #persistSettings(): void {
     try {
-      saveRunwireSettings(this.#settings);
+      saveRoutewireSettings(this.#settings);
       this.#runtimeMessage = "";
     } catch (error) {
       this.#runtimeMessage = error instanceof Error ? error.message : String(error);
@@ -608,9 +608,9 @@ export class RunwireTui {
 }
 
 export function describeActivityEvent(
-  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RoutewireRuntimeEvent, { type: "call_started" }>,
 ): Activity | undefined {
-  if (event.namespace === "runwire" && event.name === "get_skill") {
+  if (event.namespace === "routewire" && event.name === "get_skill") {
     const names = Array.isArray(event.arguments?.names)
       ? event.arguments.names.filter((value): value is string => typeof value === "string")
       : [];
@@ -625,7 +625,7 @@ export function describeActivityEvent(
   }
   if (event.namespace === "collaboration") return describeCollaborationEvent(event);
   if (!event.input) return undefined;
-  if (isInternalRunwireCode(event.input)) return undefined;
+  if (isInternalRoutewireCode(event.input)) return undefined;
 
   const projected = parseProjectedInvocation(event.input);
   if (projected) {
@@ -662,7 +662,7 @@ export function describeActivityEvent(
 }
 
 function describeCollaborationEvent(
-  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RoutewireRuntimeEvent, { type: "call_started" }>,
 ): Activity | undefined {
   if (event.name === "wait_agent" || event.name === "list_agents") return undefined;
   const task = agentTaskReference(
@@ -691,18 +691,18 @@ function describeCollaborationEvent(
   };
 }
 
-function isInternalRunwireCode(code: string): boolean {
+function isInternalRoutewireCode(code: string): boolean {
   return (
-    code.includes("const __runwireInventory = ALL_TOOLS") ||
-    code.includes("const __runwireSkillTools = ALL_TOOLS") ||
-    code.includes("const __runwireCatalog = __runwireNative") ||
-    code.includes("const __runwireContent = String(__runwireNative")
+    code.includes("const __routewireInventory = ALL_TOOLS") ||
+    code.includes("const __routewireSkillTools = ALL_TOOLS") ||
+    code.includes("const __routewireCatalog = __routewireNative") ||
+    code.includes("const __routewireContent = String(__routewireNative")
   );
 }
 
 function parseProjectedInvocation(code: string): { name: string; arguments: unknown } | undefined {
   const match = code.match(
-    /const __runwireNativeResult = await tools\[("(?:\\.|[^"\\])*")\]\(([^\n]*)\);/,
+    /const __routewireNativeResult = await tools\[("(?:\\.|[^"\\])*")\]\(([^\n]*)\);/,
   );
   if (!match?.[1] || match[2] === undefined) return undefined;
   try {
@@ -713,7 +713,7 @@ function parseProjectedInvocation(code: string): { name: string; arguments: unkn
 }
 
 function activityFromTool(
-  event: Extract<RunwireRuntimeEvent, { type: "call_started" }>,
+  event: Extract<RoutewireRuntimeEvent, { type: "call_started" }>,
   rawName: string,
   arguments_: unknown,
   source = "",
@@ -854,13 +854,13 @@ export function agentTaskReference(value: string): string {
   return trimmed.startsWith("/root/") ? trimmed.slice("/root/".length) : trimmed;
 }
 
-function settingsFingerprint(settings: RunwireSettings): string {
+function settingsFingerprint(settings: RoutewireSettings): string {
   return JSON.stringify(settings);
 }
 
 function normalizeSettings(
-  settings: RunwireSettings,
-): RunwireSettings {
+  settings: RoutewireSettings,
+): RoutewireSettings {
   return {
     ...settings,
     approvalPolicy: "never",

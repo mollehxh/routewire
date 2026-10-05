@@ -4,36 +4,36 @@ import { pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
 import { parseCliOptions } from "./cli-options.js";
-import { runwireEnv } from "./env.js";
-import { RUNWIRE_VERSION } from "./meta.js";
+import { routewireEnv } from "./env.js";
+import { ROUTEWIRE_VERSION } from "./meta.js";
 import { loadCodexModelCatalog } from "./model-catalog.js";
-import { startRunwire, type RunwireRuntime } from "./runtime.js";
-import { RunwireTui } from "./tui.js";
-import { apiKeyPath, hasStoredApiKey, type RunwireSettings } from "./tui-settings.js";
-import {checkForRunwireUpdate, installRunwireUpdate, type RunwireUpdateInfo} from "./update.js";
+import { startRoutewire, type RoutewireRuntime } from "./runtime.js";
+import { RoutewireTui } from "./tui.js";
+import { hasStoredApiKey, storedApiKeyPath, type RoutewireSettings } from "./tui-settings.js";
+import {checkForRoutewireUpdate, installRoutewireUpdate, type RoutewireUpdateInfo} from "./update.js";
 
-const HELP = `runwire
+const HELP = `routewire
 
 Expose the live Codex model-facing tool surface as a local MCP server.
 
 Usage:
-  runwire [options]
+  routewire [options]
 
 Options:
   --host <host>           Loopback bind address (default: 127.0.0.1)
   --port <port>           Local port, 0 chooses an available port (default: 0)
   --model <model>         Codex model identity (default: gpt-5.6-sol)
   --codex-home <path>     Override CODEX_HOME for the child Codex process
-  --tunnel-id <id>        OpenAI Secure MCP Tunnel ID (or RUNWIRE_TUNNEL_ID)
+  --tunnel-id <id>        OpenAI Secure MCP Tunnel ID (or ROUTEWIRE_TUNNEL_ID)
   --tunnel-api-key-file <path>
-                           Runtime API key file (or RUNWIRE_TUNNEL_API_KEY_FILE)
+                           Runtime API key file (or ROUTEWIRE_TUNNEL_API_KEY_FILE)
   --tunnel-client <path>  Override the pinned auto-downloaded tunnel-client
   --danger-full-access    Start Codex with full filesystem access and no approvals
-  -v, --version           Show the Runwire version
+  -v, --version           Show the Routewire version
   -h, --help              Show this help
 `;
 
-let activeTui: RunwireTui | undefined;
+let activeTui: RoutewireTui | undefined;
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.includes("-v") || args.includes("--version")) {
-    process.stdout.write(`${RUNWIRE_VERSION}\n`);
+    process.stdout.write(`${ROUTEWIRE_VERSION}\n`);
     return;
   }
 
@@ -55,17 +55,17 @@ async function main(): Promise<void> {
 }
 
 export async function runInteractive(options: ReturnType<typeof parseCliOptions>): Promise<void> {
-  let availableUpdate: RunwireUpdateInfo | undefined;
+  let availableUpdate: RoutewireUpdateInfo | undefined;
   const model = options.model ?? "gpt-5.6-sol";
-  const tunnelId = options.tunnelId ?? runwireEnv("RUNWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
+  const tunnelId = options.tunnelId ?? routewireEnv("ROUTEWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
   const tunnelApiKeyFile =
-    options.tunnelApiKeyFile ?? runwireEnv("RUNWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
+    options.tunnelApiKeyFile ?? routewireEnv("ROUTEWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
   const tunnelClient =
-    options.tunnelClient ?? runwireEnv("RUNWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
+    options.tunnelClient ?? routewireEnv("ROUTEWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
   const externalApiKey = Boolean(process.env.CONTROL_PLANE_API_KEY || tunnelApiKeyFile);
   const modelCatalog = loadCodexModelCatalog(options.codexHome);
 
-  let runtime: RunwireRuntime | undefined;
+  let runtime: RoutewireRuntime | undefined;
   let closingRuntime = false;
   let quitting = false;
   let updateAbort: AbortController | undefined;
@@ -73,7 +73,7 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
   let operation = Promise.resolve();
   let requestQuit = () => undefined;
 
-  const tui = new RunwireTui({
+  const tui = new RoutewireTui({
     cwd: process.cwd(),
     model,
     modelCatalog,
@@ -104,12 +104,12 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
       updateAbort = abort;
       operation = operation.then(async () => {
         try {
-          await installRunwireUpdate(update, {signal: abort.signal});
+          await installRoutewireUpdate(update, {signal: abort.signal});
           quitting = true;
           tui.stop();
           activeTui = undefined;
           process.stdout.write(
-            `[runwire] Updated to ${update.latestVersion}. Restart Runwire to use the new version.\n`,
+            `[routewire] Updated to ${update.latestVersion}. Restart Routewire to use the new version.\n`,
           );
           quitResolve?.();
         } catch (error) {
@@ -134,10 +134,10 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
         activeTui = undefined;
         quitResolve?.();
       }
-    }).catch(error => process.stderr.write(`[runwire] ${errorMessage(error)}\n`)).then(() => undefined);
+    }).catch(error => process.stderr.write(`[routewire] ${errorMessage(error)}\n`)).then(() => undefined);
   };
   tui.start();
-  void checkForRunwireUpdate().then(update => {
+  void checkForRoutewireUpdate().then(update => {
     if (quitting) return;
     availableUpdate = update;
     if (update) tui.showAvailableUpdate(update);
@@ -146,15 +146,15 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
     if (!quitting) tui.finishUpdateCheck();
   });
 
-  async function launch(settings: RunwireSettings): Promise<void> {
+  async function launch(settings: RoutewireSettings): Promise<void> {
     validateLaunchSettings(settings, tunnelApiKeyFile);
     if (runtime) await stopRuntime();
     tui.setRuntimeState("starting");
     closingRuntime = false;
 
-    const storedKeyFile = !externalApiKey && hasStoredApiKey() ? apiKeyPath() : undefined;
+    const storedKeyFile = !externalApiKey ? storedApiKeyPath() : undefined;
     const currentModelCatalog = loadCodexModelCatalog(options.codexHome);
-    const next = await startRunwire({
+    const next = await startRoutewire({
       cwd: process.cwd(),
       host: options.host,
       port: options.port,
@@ -221,12 +221,12 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
 }
 
 async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise<void> {
-  const tunnelId = options.tunnelId ?? runwireEnv("RUNWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
+  const tunnelId = options.tunnelId ?? routewireEnv("ROUTEWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
   const tunnelApiKeyFile =
-    options.tunnelApiKeyFile ?? runwireEnv("RUNWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
+    options.tunnelApiKeyFile ?? routewireEnv("ROUTEWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
   const tunnelClient =
-    options.tunnelClient ?? runwireEnv("RUNWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
-  const runtime = await startRunwire({
+    options.tunnelClient ?? routewireEnv("ROUTEWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
+  const runtime = await startRoutewire({
     cwd: process.cwd(),
     host: options.host,
     port: options.port,
@@ -239,14 +239,14 @@ async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise
       : undefined,
   });
 
-  process.stdout.write(`[runwire] project: ${runtime.cwd}\n`);
-  process.stdout.write(`[runwire] model: ${runtime.model}\n`);
-  process.stdout.write(`[runwire] MCP: ${runtime.mcpUrl}\n`);
-  process.stdout.write(`[runwire] provider: ${runtime.providerBaseUrl}\n`);
+  process.stdout.write(`[routewire] project: ${runtime.cwd}\n`);
+  process.stdout.write(`[routewire] model: ${runtime.model}\n`);
+  process.stdout.write(`[routewire] MCP: ${runtime.mcpUrl}\n`);
+  process.stdout.write(`[routewire] provider: ${runtime.providerBaseUrl}\n`);
   process.stdout.write(
     runtime.tunnelHealthUrl
-      ? `[runwire] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`
-      : "[runwire] Secure MCP Tunnel: not configured\n",
+      ? `[routewire] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`
+      : "[routewire] Secure MCP Tunnel: not configured\n",
   );
 
   let stopping = false;
@@ -266,7 +266,7 @@ async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise
   }
 }
 
-function validateLaunchSettings(settings: RunwireSettings, externalApiKeyFile?: string): void {
+function validateLaunchSettings(settings: RoutewireSettings, externalApiKeyFile?: string): void {
   if (!settings.tunnelEnabled) return;
   if (!/^tunnel_[A-Za-z0-9._-]+$/.test(settings.tunnelId)) {
     throw new Error("Set a valid Tunnel ID in Connection before starting");
@@ -283,6 +283,6 @@ function errorMessage(error: unknown): string {
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main().catch(error => {
   activeTui?.stop();
   activeTui = undefined;
-  process.stderr.write(`[runwire] ${errorMessage(error)}\n`);
+  process.stderr.write(`[routewire] ${errorMessage(error)}\n`);
   process.exitCode = 1;
 });

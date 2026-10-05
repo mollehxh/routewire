@@ -6,7 +6,7 @@ export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-ac
 export type CodexApprovalPolicy = "never";
 export type SubagentModel = string;
 
-export interface RunwireSettings {
+export interface RoutewireSettings {
   tunnelEnabled: boolean;
   tunnelId: string;
   sandboxMode: CodexSandboxMode;
@@ -15,7 +15,7 @@ export interface RunwireSettings {
   allowedSubagentModels: SubagentModel[];
 }
 
-export const DEFAULT_RUNWIRE_SETTINGS: RunwireSettings = {
+export const DEFAULT_ROUTEWIRE_SETTINGS: RoutewireSettings = {
   tunnelEnabled: false,
   tunnelId: "",
   sandboxMode: "workspace-write",
@@ -24,9 +24,11 @@ export const DEFAULT_RUNWIRE_SETTINGS: RunwireSettings = {
   allowedSubagentModels: ["gpt-6-luna"],
 };
 
-export function loadRunwireSettings(): RunwireSettings {
+export function loadRoutewireSettings(): RoutewireSettings {
   try {
-    const parsed = JSON.parse(fs.readFileSync(settingsPath(), "utf8")) as Partial<RunwireSettings>;
+    const current = settingsPath();
+    const file = fs.existsSync(current) ? current : legacySettingsPath();
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<RoutewireSettings>;
     const allowedSubagentModels = Array.isArray(parsed.allowedSubagentModels)
       ? parsed.allowedSubagentModels.filter(value => typeof value === "string" && value.length > 0)
       : ["gpt-6-luna"];
@@ -44,22 +46,29 @@ export function loadRunwireSettings(): RunwireSettings {
       allowedSubagentModels,
     };
   } catch {
-    return structuredClone(DEFAULT_RUNWIRE_SETTINGS);
+    return structuredClone(DEFAULT_ROUTEWIRE_SETTINGS);
   }
 }
 
-export function saveRunwireSettings(settings: RunwireSettings): void {
+export function saveRoutewireSettings(settings: RoutewireSettings): void {
   const file = settingsPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
 }
 
 export function hasStoredApiKey(): boolean {
-  try {
-    return fs.readFileSync(apiKeyPath(), "utf8").trim().length > 0;
-  } catch {
-    return false;
+  return storedApiKeyPath() !== undefined;
+}
+
+export function storedApiKeyPath(): string | undefined {
+  for (const file of [apiKeyPath(), legacyApiKeyPath()]) {
+    try {
+      if (fs.readFileSync(file, "utf8").trim().length > 0) return file;
+    } catch {
+      // Keep looking for a legacy credential file.
+    }
   }
+  return undefined;
 }
 
 export function saveApiKey(value: string): void {
@@ -85,5 +94,18 @@ export function apiKeyPath(): string {
 
 function configDir(): string {
   const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  return path.join(base, "routewire");
+}
+
+function legacyConfigDir(): string {
+  const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
   return path.join(base, "runwire");
+}
+
+function legacySettingsPath(): string {
+  return path.join(legacyConfigDir(), "settings.json");
+}
+
+function legacyApiKeyPath(): string {
+  return path.join(legacyConfigDir(), "credentials", "control-plane-api-key");
 }

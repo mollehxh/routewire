@@ -1,4 +1,4 @@
-export const RUNWIRE_MCP_INSTRUCTIONS = `This server exposes one persistent live Codex runtime and its native tool surface.
+export const ROUTEWIRE_MCP_INSTRUCTIONS = `This server exposes one persistent live Codex runtime and its native tool surface.
 
 Before ordinary substantive work in a conversation, call \`bootstrap\` once if the current Codex context has not already been loaded. It returns the current runtime/project context, applicable AGENTS.md instructions, permissions, and the native Codex skill catalog. Reuse that context for later turns unless the runtime was restarted or the context is known to have changed.
 
@@ -10,6 +10,6 @@ Skill handling:
 
 Tool use:
 - Prefer a directly exposed native Codex tool for a simple single operation.
-- Use the collaboration tools for subagent work. \`spawn_agent\` is restricted to the child-model allowlist configured in Runwire; use only models exposed by its current tool schema and description. Reasoning effort may be low, medium, high, xhigh, max, or ultra.
+- Use the collaboration tools for subagent work. \`spawn_agent\` is restricted to the child-model allowlist configured in Routewire; use only models exposed by its current tool schema and description. Reasoning effort may be low, medium, high, xhigh, max, or ultra.
 - Use \`exec\` when multiple native calls, batching, persistent JavaScript values, or control flow are useful, or when a needed native tool is available only through Code Mode.
 - Reuse context already obtained in this conversation instead of repeating discovery calls unnecessarily.`;

@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   compactExecDescription,
   isModelSpawningTool,
-  isRunwireBlockedTool,
-  RUNWIRE_EXEC_GUIDANCE,
+  isRoutewireBlockedTool,
+  ROUTEWIRE_EXEC_GUIDANCE,
   wrapExecCode,
 } from "../src/tool-policy.js";
 
-describe("Runwire tool policy", () => {
+describe("Routewire tool policy", () => {
   it("preserves the initial exec pragma before the policy block", () => {
     const pragma = '// @exec: {"yield_time_ms": 120000, "max_output_tokens": 1234}';
     expect(wrapExecCode(`${pragma}\r\ntext('ok');`).split('\n')[0]).toBe(pragma);
@@ -38,13 +38,13 @@ describe("Runwire tool policy", () => {
 
   it("blocks Codex Apps test-harness tools without blocking canonical Browser Use", () => {
     expect(
-      isRunwireBlockedTool({
+      isRoutewireBlockedTool({
         name: "mcp__codex_apps__test_harnes_0001_node_repl",
         description: "Node REPL with Browser Use runtime.",
       }),
     ).toBe(true);
     expect(
-      isRunwireBlockedTool({
+      isRoutewireBlockedTool({
         name: "mcp__node_repl__js",
         description: "Canonical Node REPL.",
       }),
@@ -52,9 +52,9 @@ describe("Runwire tool policy", () => {
   });
 
   it("documents when ChatGPT should prefer direct tools versus Code Mode", () => {
-    expect(RUNWIRE_EXEC_GUIDANCE).toContain("Prefer a directly exposed native tool");
-    expect(RUNWIRE_EXEC_GUIDANCE).toContain("multiple native calls");
-    expect(RUNWIRE_EXEC_GUIDANCE).toContain("ALL_TOOLS");
+    expect(ROUTEWIRE_EXEC_GUIDANCE).toContain("Prefer a directly exposed native tool");
+    expect(ROUTEWIRE_EXEC_GUIDANCE).toContain("multiple native calls");
+    expect(ROUTEWIRE_EXEC_GUIDANCE).toContain("ALL_TOOLS");
   });
 
   it("removes duplicated shared MCP types and nested tool declarations from exec descriptions", () => {

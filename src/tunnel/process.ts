@@ -52,7 +52,7 @@ export async function startTunnelClient(
     );
   }
 
-  const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "runwire-tunnel-"));
+  const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "routewire-tunnel-"));
   const healthUrlFile = path.join(stateDir, "health.url");
   const args = [
     ...(options.commandPrefixArgs ?? []),

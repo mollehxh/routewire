@@ -11,7 +11,7 @@ const MODEL_TOOL_DESCRIPTION_PATTERN =
 
 const TEST_HARNESS_TOOL_NAME_PATTERN = /(?:^|__)codex_apps__test_harnes[^_]*_/i;
 
-export const RUNWIRE_EXEC_GUIDANCE = [
+export const ROUTEWIRE_EXEC_GUIDANCE = [
   "This server runs one real Codex turn and exposes its native Code Mode tools.",
   "Prefer a directly exposed native tool for a single operation.",
   "Use exec when multiple native calls, batching, persistent JavaScript values, control flow, or an unprojected native Codex tool make Code Mode useful.",
@@ -35,7 +35,7 @@ export function isModelSpawningTool(tool: ToolMetadata): boolean {
   );
 }
 
-export function isRunwireBlockedTool(tool: ToolMetadata): boolean {
+export function isRoutewireBlockedTool(tool: ToolMetadata): boolean {
   return isModelSpawningTool(tool) || TEST_HARNESS_TOOL_NAME_PATTERN.test(tool.name);
 }
 
@@ -48,46 +48,46 @@ export function wrapExecCode(code: string): string {
   const testHarnessPattern = JSON.stringify(TEST_HARNESS_TOOL_NAME_PATTERN.source);
 
   return `${pragma}{
-  const __runwireNamePattern = new RegExp(${namePattern}, "i");
-  const __runwireDescriptionPattern = new RegExp(${descriptionPattern}, "i");
-  const __runwireTestHarnessPattern = new RegExp(${testHarnessPattern}, "i");
-  const __runwireOriginalTools = globalThis.tools;
-  const __runwireOriginalInventory = Array.isArray(globalThis.ALL_TOOLS)
+  const __routewireNamePattern = new RegExp(${namePattern}, "i");
+  const __routewireDescriptionPattern = new RegExp(${descriptionPattern}, "i");
+  const __routewireTestHarnessPattern = new RegExp(${testHarnessPattern}, "i");
+  const __routewireOriginalTools = globalThis.tools;
+  const __routewireOriginalInventory = Array.isArray(globalThis.ALL_TOOLS)
     ? globalThis.ALL_TOOLS
     : [];
-  const __runwireBlockedNames = new Set(
-    __runwireOriginalInventory
+  const __routewireBlockedNames = new Set(
+    __routewireOriginalInventory
       .filter(tool => {
         const name = String(tool?.name ?? "");
         const description = String(tool?.description ?? "");
-        return __runwireNamePattern.test(name) ||
-          __runwireDescriptionPattern.test(description) ||
-          __runwireTestHarnessPattern.test(name);
+        return __routewireNamePattern.test(name) ||
+          __routewireDescriptionPattern.test(description) ||
+          __routewireTestHarnessPattern.test(name);
       })
       .map(tool => String(tool.name)),
   );
-  const __runwireFilteredTools = Object.create(null);
-  for (const tool of __runwireOriginalInventory) {
+  const __routewireFilteredTools = Object.create(null);
+  for (const tool of __routewireOriginalInventory) {
     const name = String(tool?.name ?? "");
-    if (!name || __runwireBlockedNames.has(name)) continue;
-    const callable = __runwireOriginalTools[name];
+    if (!name || __routewireBlockedNames.has(name)) continue;
+    const callable = __routewireOriginalTools[name];
     if (typeof callable === "function") {
-      Object.defineProperty(__runwireFilteredTools, name, {
-        value: callable.bind(__runwireOriginalTools),
+      Object.defineProperty(__routewireFilteredTools, name, {
+        value: callable.bind(__routewireOriginalTools),
         enumerable: true,
       });
     }
   }
-  globalThis.ALL_TOOLS = __runwireOriginalInventory.filter(
-    tool => !__runwireBlockedNames.has(String(tool?.name ?? "")),
+  globalThis.ALL_TOOLS = __routewireOriginalInventory.filter(
+    tool => !__routewireBlockedNames.has(String(tool?.name ?? "")),
   );
-  globalThis.tools = new Proxy(__runwireFilteredTools, {
+  globalThis.tools = new Proxy(__routewireFilteredTools, {
     get(target, property, receiver) {
       const name = String(property);
-      if (__runwireTestHarnessPattern.test(name)) {
+      if (__routewireTestHarnessPattern.test(name)) {
         throw new Error("Blocked test-harness tool: " + name);
       }
-      if (__runwireBlockedNames.has(name) || __runwireNamePattern.test(name)) {
+      if (__routewireBlockedNames.has(name) || __routewireNamePattern.test(name)) {
         throw new Error("Blocked model-spawning tool: " + name);
       }
       return Reflect.get(target, property, receiver);

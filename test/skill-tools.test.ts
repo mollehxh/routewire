@@ -7,13 +7,13 @@ import { describe, expect, it } from "vitest";
 import type { CodexTurnBridge } from "../src/bridge.js";
 import {
   discoverNativeSkillTools,
-  invokeRunwireSkillTool,
+  invokeRoutewireSkillTool,
   loadNativeSkillCatalog,
 } from "../src/mcp/skill-tools.js";
 
-describe("Runwire Codex skill tools", () => {
+describe("Routewire Codex skill tools", () => {
   it("lists and reads the same canonical enabled skill when app-server returns duplicate names", async () => {
-    const root = await mkdtemp(join(tmpdir(), "runwire-duplicate-skills-"));
+    const root = await mkdtemp(join(tmpdir(), "routewire-duplicate-skills-"));
     try {
       const first = join(root, "first.md"), second = join(root, "second.md");
       await writeFile(first, "first canonical body");
@@ -27,13 +27,13 @@ describe("Runwire Codex skill tools", () => {
       const native = {kind: "app-server" as const, command, cwd: root, codexHome: root};
       const bridge = {} as CodexTurnBridge;
       expect(await loadNativeSkillCatalog(bridge, native)).toEqual([{name: "demo", description: "first"}]);
-      const read = await invokeRunwireSkillTool(bridge, native, "get_skill", {names: ["demo"]});
+      const read = await invokeRoutewireSkillTool(bridge, native, "get_skill", {names: ["demo"]});
       expect(read.isError).toBe(false);
       expect(read.content).toEqual([{type: "text", text: JSON.stringify({skills: [{name:"demo", content:"first canonical body"}]})}]);
     } finally {await rm(root, {recursive:true,force:true});}
   });
   it("emits semantic lifecycle events when reading a skill", async () => {
-    const root = await mkdtemp(join(tmpdir(), "runwire-skill-events-"));
+    const root = await mkdtemp(join(tmpdir(), "routewire-skill-events-"));
     const skillRoot = join(root, "skills");
     const skillDir = join(skillRoot, "tui-design");
     await mkdir(skillDir, { recursive: true });
@@ -47,7 +47,7 @@ describe("Runwire Codex skill tools", () => {
     } as unknown as CodexTurnBridge;
     const events: Array<{type: string; name?: string; arguments?: Record<string, unknown>; isError?: boolean}> = [];
 
-    const result = await invokeRunwireSkillTool(
+    const result = await invokeRoutewireSkillTool(
       bridge,
       {kind: "local", roots: [skillRoot]},
       "get_skill",
@@ -59,20 +59,20 @@ describe("Runwire Codex skill tools", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
       type: "call_started",
-      namespace: "runwire",
+      namespace: "routewire",
       name: "get_skill",
       arguments: {names: ["tui-design"]},
     });
     expect(events[1]).toMatchObject({
       type: "call_finished",
-      namespace: "runwire",
+      namespace: "routewire",
       name: "get_skill",
       isError: false,
     });
   });
 
   it("uses CODEX_HOME skills locally without invoking a nested connector", async () => {
-    const root = await mkdtemp(join(tmpdir(), "runwire-local-skills-"));
+    const root = await mkdtemp(join(tmpdir(), "routewire-local-skills-"));
     const codexHome = join(root, "codex");
     const skillDir = join(codexHome, "skills", "demo-skill");
     await mkdir(skillDir, { recursive: true });
@@ -102,7 +102,7 @@ describe("Runwire Codex skill tools", () => {
       { name: "demo-skill", description: "Local demo skill" },
     );
 
-    const result = await invokeRunwireSkillTool(
+    const result = await invokeRoutewireSkillTool(
       bridge,
       nativeTools,
       "get_skill",

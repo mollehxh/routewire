@@ -99,7 +99,7 @@ function schemaFor(name: string, policy: CollaborationPolicy): ZodType | undefin
       reasoning_effort: reasoningEffort,
       model: z.string().refine(
         value => policy.allowedModels.includes(value),
-        "Model is blocked by Runwire subagent policy",
+        "Model is blocked by Routewire subagent policy",
       ),
     });
   }
@@ -118,10 +118,10 @@ function mapArguments(
   if (name !== "spawn_agent") return arguments_;
   const model = arguments_.model;
   if (typeof model !== "string" || !policy.allowedModels.includes(model)) {
-    throw new Error("spawn_agent must select a model from the Runwire allowlist");
+    throw new Error("spawn_agent must select a model from the Routewire allowlist");
   }
   const modelSpec = catalogEntry(policy.catalog, model);
-  if (!modelSpec) throw new Error(`Runwire has no model metadata for ${model}`);
+  if (!modelSpec) throw new Error(`Routewire has no model metadata for ${model}`);
   const effort = arguments_.reasoning_effort;
   if (effort !== undefined && (!isReasoningEffort(effort) || !modelSpec.efforts.includes(effort))) {
     throw new Error(`Reasoning effort ${String(effort)} is not supported by ${model}`);
@@ -143,7 +143,7 @@ function spawnDescription(nativeDescription: string, policy: CollaborationPolicy
   });
   return [
     `Allowed child models and reasoning efforts:\n${models.join("\n")}`,
-    "Choose the model and reasoning effort for each spawned agent. Runwire does not impose defaults.",
+    "Choose the model and reasoning effort for each spawned agent. Routewire does not impose defaults.",
     'fork_turns defaults to "none" and may be "none" or a positive recent-turn count.',
     behavior,
   ].join("\n\n");

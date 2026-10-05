@@ -16,7 +16,7 @@ import { handleProviderHttpRequest } from "./provider/http.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 import type { ReasoningEffort } from "./model-catalog.js";
 
-export interface RunwireHttpSurfaceOptions {
+export interface RoutewireHttpSurfaceOptions {
   bridge: CodexTurnBridge;
   host?: string;
   port?: number;
@@ -25,7 +25,7 @@ export interface RunwireHttpSurfaceOptions {
   onEvent?: (event: CodexBridgeEvent) => void;
 }
 
-export class RunwireHttpSurface {
+export class RoutewireHttpSurface {
   readonly #bridge: CodexTurnBridge;
   readonly #host: string;
   readonly #requestedPort: number;
@@ -42,11 +42,11 @@ export class RunwireHttpSurface {
   #refreshProjectedTools?: () => Promise<ProjectedNativeTool[]>;
   #closePromise?: Promise<void>;
 
-  constructor(options: RunwireHttpSurfaceOptions) {
+  constructor(options: RoutewireHttpSurfaceOptions) {
     this.#bridge = options.bridge;
     this.#host = options.host ?? "127.0.0.1";
     if (!isLoopbackHost(this.#host)) {
-      throw new Error(`Runwire only binds loopback addresses; received host ${this.#host}`);
+      throw new Error(`Routewire only binds loopback addresses; received host ${this.#host}`);
     }
     this.#requestedPort = options.port ?? 0;
     this.#allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
@@ -63,7 +63,7 @@ export class RunwireHttpSurface {
   }
 
   get origin(): string {
-    if (this.#port === undefined) throw new Error("Runwire HTTP surface is not started");
+    if (this.#port === undefined) throw new Error("Routewire HTTP surface is not started");
     return `http://${formatHostForUrl(this.#host)}:${this.#port}`;
   }
 
@@ -88,7 +88,7 @@ export class RunwireHttpSurface {
   }
 
   async start(): Promise<void> {
-    if (this.#server) throw new Error("Runwire HTTP surface is already started");
+    if (this.#server) throw new Error("Routewire HTTP surface is already started");
     if (this.#closePromise) {
       await this.#closePromise.catch(() => undefined);
       this.#closePromise = undefined;
@@ -167,7 +167,7 @@ export class RunwireHttpSurface {
     const address = server.address();
     if (!address || typeof address === "string") {
       await this.close();
-      throw new Error("Could not determine Runwire listening address");
+      throw new Error("Could not determine Routewire listening address");
     }
     this.#port = address.port;
   }

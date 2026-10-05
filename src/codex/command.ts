@@ -11,7 +11,7 @@ export interface BuildCodexArgsOptions {
 
 export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
   const providerConfig = [
-    'name="Runwire"',
+    'name="Routewire"',
     `base_url="${options.providerBaseUrl}"`,
     'wire_api="responses"',
     "requires_openai_auth=true",
@@ -26,9 +26,9 @@ export function buildCodexArgs(options: BuildCodexArgsOptions): string[] {
     "-m",
     options.model,
     "-c",
-    'model_provider="runwire"',
+    'model_provider="routewire"',
     "-c",
-    `model_providers.runwire={${providerConfig}}`,
+    `model_providers.routewire={${providerConfig}}`,
     "-c",
     "analytics.enabled=false",
     "-c",

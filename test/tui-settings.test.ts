@@ -5,12 +5,13 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_RUNWIRE_SETTINGS,
+  DEFAULT_ROUTEWIRE_SETTINGS,
   apiKeyPath,
   hasStoredApiKey,
-  loadRunwireSettings,
+  loadRoutewireSettings,
   saveApiKey,
-  saveRunwireSettings,
+  saveRoutewireSettings,
+  storedApiKeyPath,
   settingsPath,
 } from "../src/tui-settings.js";
 
@@ -21,12 +22,12 @@ afterEach(() => {
   else process.env.XDG_CONFIG_HOME = originalXdg;
 });
 
-describe("Runwire settings", () => {
+describe("Routewire settings", () => {
   it("persists product settings and an allowlist of subagent models", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-settings-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-settings-"));
     process.env.XDG_CONFIG_HOME = root;
-    saveRunwireSettings({
-      ...DEFAULT_RUNWIRE_SETTINGS,
+    saveRoutewireSettings({
+      ...DEFAULT_ROUTEWIRE_SETTINGS,
       tunnelEnabled: true,
       tunnelId: "tunnel_test",
       sandboxMode: "read-only",
@@ -34,8 +35,8 @@ describe("Runwire settings", () => {
       allowedSubagentModels: ["gpt-6-luna", "gpt-5.6-terra"],
     });
 
-    expect(settingsPath()).toBe(path.join(root, "runwire", "settings.json"));
-    expect(loadRunwireSettings()).toMatchObject({
+    expect(settingsPath()).toBe(path.join(root, "routewire", "settings.json"));
+    expect(loadRoutewireSettings()).toMatchObject({
       tunnelEnabled: true,
       tunnelId: "tunnel_test",
       sandboxMode: "read-only",
@@ -45,7 +46,7 @@ describe("Runwire settings", () => {
   });
 
   it("stores the tunnel API key outside the main settings file", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-key-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-key-"));
     process.env.XDG_CONFIG_HOME = root;
     saveApiKey("secret-value");
 
@@ -54,16 +55,35 @@ describe("Runwire settings", () => {
     expect(fs.existsSync(settingsPath())).toBe(false);
   });
 
+  it("reads settings and credentials from the previous Runwire config directory", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-legacy-config-"));
+    process.env.XDG_CONFIG_HOME = root;
+    const legacyDir = path.join(root, "runwire");
+    const legacyKey = path.join(legacyDir, "credentials", "control-plane-api-key");
+    fs.mkdirSync(path.dirname(legacyKey), {recursive: true});
+    fs.writeFileSync(path.join(legacyDir, "settings.json"), JSON.stringify({
+      ...DEFAULT_ROUTEWIRE_SETTINGS,
+      tunnelEnabled: true,
+      tunnelId: "tunnel_legacy",
+    }));
+    fs.writeFileSync(legacyKey, "legacy-secret\n");
+
+    expect(loadRoutewireSettings()).toMatchObject({tunnelEnabled: true, tunnelId: "tunnel_legacy"});
+    expect(hasStoredApiKey()).toBe(true);
+    expect(storedApiKeyPath()).toBe(legacyKey);
+    expect(settingsPath()).toBe(path.join(root, "routewire", "settings.json"));
+  });
+
   it("normalizes legacy approval settings to never", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-settings-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-settings-"));
     process.env.XDG_CONFIG_HOME = root;
     const file = settingsPath();
     fs.mkdirSync(path.dirname(file), {recursive: true});
     fs.writeFileSync(file, JSON.stringify({
-      ...DEFAULT_RUNWIRE_SETTINGS,
+      ...DEFAULT_ROUTEWIRE_SETTINGS,
       approvalPolicy: "on-request",
     }));
 
-    expect(loadRunwireSettings().approvalPolicy).toBe("never");
+    expect(loadRoutewireSettings().approvalPolicy).toBe("never");
   });
 });

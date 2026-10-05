@@ -60,7 +60,7 @@ describe("collaboration tool projection", () => {
     });
   });
 
-  it("enforces only the Runwire model allowlist", () => {
+  it("enforces only the Routewire model allowlist", () => {
     const [tool] = selectCollaborationTools([spec("spawn_agent")], policy);
 
     expect(tool.description).toContain("gpt-5.6-terra");
@@ -105,6 +105,6 @@ describe("collaboration tool projection", () => {
     })).toMatchObject({ model: "gpt-5.6-terra", fork_turns: "4", reasoning_effort: "ultra" });
     expect(tool.description).toContain("- gpt-6-luna: low, medium, high, xhigh, max\n");
     expect(tool.description).toContain("- gpt-5.6-terra: low, medium, high, xhigh, max, ultra");
-    expect(tool.description).toContain("Runwire does not impose defaults");
+    expect(tool.description).toContain("Routewire does not impose defaults");
   });
 });

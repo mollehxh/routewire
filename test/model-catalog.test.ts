@@ -10,7 +10,7 @@ import {
 
 describe("Codex model catalog", () => {
   it("loads visible models and per-model reasoning efforts from models_cache.json", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "runwire-model-catalog-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-model-catalog-"));
     fs.writeFileSync(path.join(root, "models_cache.json"), JSON.stringify({
       models: [
         {

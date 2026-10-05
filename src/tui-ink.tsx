@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from "react";
 import {Box, Text, useInput, useStdout} from "ink";
 
 import type {CodexModelCatalogEntry} from "./model-catalog.js";
-import type {RunwireSettings} from "./tui-settings.js";
+import type {RoutewireSettings} from "./tui-settings.js";
 
 export type InkRuntimeState = "stopped" | "starting" | "running" | "stopping" | "error";
 export type InkView =
@@ -55,7 +55,7 @@ export interface InkAgentActivity {
   durationMs?: number;
 }
 
-export interface RunwireInkState {
+export interface RoutewireInkState {
   cwd: string;
   model: string;
   modelCatalog: readonly CodexModelCatalogEntry[];
@@ -66,7 +66,7 @@ export interface RunwireInkState {
   selection: number;
   editing?: InkEditingField;
   inputBuffer: string;
-  settings: RunwireSettings;
+  settings: RoutewireSettings;
   apiKeyConfigured: boolean;
   components: Map<string, string>;
   active: InkActivity[];
@@ -81,12 +81,12 @@ export interface RunwireInkState {
   };
 }
 
-export interface RunwireInkAppProps {
-  state: RunwireInkState;
+export interface RoutewireInkAppProps {
+  state: RoutewireInkState;
   onKey: (key: string) => void;
 }
 
-export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
+export function RoutewireInkApp({state, onKey}: RoutewireInkAppProps) {
   const {stdout} = useStdout();
   const [terminalSize, setTerminalSize] = useState(() => ({
     columns: stdout.columns ?? 80,
@@ -135,7 +135,7 @@ export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
   if (terminalSize.columns < 60 || terminalSize.rows < 18) {
     return (
       <Box width="100%" height={terminalSize.rows} alignItems="center" justifyContent="center" flexDirection="column">
-        <Text bold>runwire</Text>
+        <Text bold>routewire</Text>
         <Text dimColor>Terminal too small — resize to at least 60×18.</Text>
       </Box>
     );
@@ -146,7 +146,7 @@ export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
       <Box width="100%" height={terminalSize.rows} flexDirection="column" paddingX={2}>
         <Box flexGrow={1} justifyContent="center" alignItems="center">
           <Box flexDirection="column" alignItems="center">
-            <Text color={RUNWIRE_ACCENT} bold>{RUNWIRE_MARK}</Text>
+            <Text color={ROUTEWIRE_ACCENT} bold>{ROUTEWIRE_MARK}</Text>
             <Text> </Text>
             <Text bold>Checking for updates…</Text>
           </Box>
@@ -227,15 +227,15 @@ export function RunwireInkApp({state, onKey}: RunwireInkAppProps) {
   return null;
 }
 
-function UpdateView({state}: {state: RunwireInkState}) {
+function UpdateView({state}: {state: RoutewireInkState}) {
   const update = state.update!;
   const installing = update.status === "installing";
   return (
     <Box flexDirection="column" alignItems="center">
-      <Text color={RUNWIRE_ACCENT} bold>{RUNWIRE_MARK}</Text>
+      <Text color={ROUTEWIRE_ACCENT} bold>{ROUTEWIRE_MARK}</Text>
       <Text> </Text>
       <Text bold>Update available</Text>
-      <Text><Text dimColor>{update.currentVersion}</Text>  →  <Text color={RUNWIRE_ACCENT} bold>{update.latestVersion}</Text></Text>
+      <Text><Text dimColor>{update.currentVersion}</Text>  →  <Text color={ROUTEWIRE_ACCENT} bold>{update.latestVersion}</Text></Text>
 
       <Box width={46} marginTop={2} flexDirection="column">
         {installing ? (
@@ -254,7 +254,7 @@ function UpdateView({state}: {state: RunwireInkState}) {
 
       <Box width={52} marginTop={1} flexDirection="column">
         <Text dimColor>{installing ? "Running" : "Update command"}</Text>
-        <Text color={RUNWIRE_ACCENT}>{update.command}</Text>
+        <Text color={ROUTEWIRE_ACCENT}>{update.command}</Text>
         {update.status === "error" && update.message ? (
           <Text color="red">Update failed: {update.message}</Text>
         ) : null}
@@ -263,16 +263,16 @@ function UpdateView({state}: {state: RunwireInkState}) {
   );
 }
 
-function MenuView({state}: {state: RunwireInkState}) {
+function MenuView({state}: {state: RoutewireInkState}) {
   const action = mainAction(state);
   const eventCount = state.active.length + state.recent.length;
 
   return (
     <Box flexDirection="column" alignItems="center">
       <Box flexDirection="column" alignItems="center">
-        <Text color={RUNWIRE_ACCENT} bold>{RUNWIRE_MARK}</Text>
+        <Text color={ROUTEWIRE_ACCENT} bold>{ROUTEWIRE_MARK}</Text>
         <Text> </Text>
-        <Text bold>R U N W I R E</Text>
+        <Text bold>R O U T E W I R E</Text>
         <Text dimColor>Local Codex bridge for ChatGPT</Text>
       </Box>
 
@@ -297,7 +297,7 @@ function MenuView({state}: {state: RunwireInkState}) {
   );
 }
 
-function SettingsWorkspace({state}: {state: RunwireInkState}) {
+function SettingsWorkspace({state}: {state: RoutewireInkState}) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       <SettingsBreadcrumb view={state.view}/>
@@ -342,7 +342,7 @@ function InternalBreadcrumb({
       justifyContent="space-between"
     >
       <Box>
-        <Text color={RUNWIRE_ACCENT} bold>//&gt;</Text>
+        <Text color={ROUTEWIRE_ACCENT} bold>//&gt;</Text>
         <Text>  </Text>
         {segments.map((segment, index) => (
           <Box key={`${segment}-${index}`}>
@@ -356,7 +356,7 @@ function InternalBreadcrumb({
   );
 }
 
-function SettingsMenuView({state}: {state: RunwireInkState}) {
+function SettingsMenuView({state}: {state: RoutewireInkState}) {
   return (
     <Box width={44} flexDirection="column">
       <SettingsNavRow label="Connection" selected={state.selection === 0}/>
@@ -365,7 +365,7 @@ function SettingsMenuView({state}: {state: RunwireInkState}) {
   );
 }
 
-function ConnectionSettingsView({state}: {state: RunwireInkState}) {
+function ConnectionSettingsView({state}: {state: RoutewireInkState}) {
   return (
     <Box flexDirection="column">
       <SettingsValueRow
@@ -386,7 +386,7 @@ function ConnectionSettingsView({state}: {state: RunwireInkState}) {
   );
 }
 
-function CodexSettingsView({state}: {state: RunwireInkState}) {
+function CodexSettingsView({state}: {state: RoutewireInkState}) {
   return (
     <Box flexDirection="column">
       <SettingsValueRow
@@ -407,7 +407,7 @@ function CodexSettingsView({state}: {state: RunwireInkState}) {
   );
 }
 
-function AgentModelsView({state}: {state: RunwireInkState}) {
+function AgentModelsView({state}: {state: RoutewireInkState}) {
   const selected = state.modelCatalog[state.selection];
   const available = state.settings.allowedSubagentModels.length;
   return (
@@ -432,8 +432,8 @@ function AgentModelsView({state}: {state: RunwireInkState}) {
           {selected.description ? <Text dimColor wrap="wrap">{selected.description}</Text> : null}
           <Text dimColor>{available}/{state.modelCatalog.length} models available to subagents.</Text>
           <Box marginTop={1}>
-            <Text color={RUNWIRE_ACCENT} bold>! </Text>
-            <Text color={RUNWIRE_ACCENT} bold>Subagents consume your Codex plan usage.</Text>
+            <Text color={ROUTEWIRE_ACCENT} bold>! </Text>
+            <Text color={ROUTEWIRE_ACCENT} bold>Subagents consume your Codex plan usage.</Text>
           </Box>
         </Box>
       ) : null}
@@ -448,7 +448,7 @@ function ActivityView({
   terminalRows,
   terminalColumns,
 }: {
-  state: RunwireInkState;
+  state: RoutewireInkState;
   now: number;
   terminalRows: number;
   terminalColumns: number;
@@ -579,21 +579,21 @@ function MenuRow({
     <Box
       width="100%"
       paddingX={1}
-      backgroundColor={selected ? RUNWIRE_SELECTION : undefined}
+      backgroundColor={selected ? ROUTEWIRE_SELECTION : undefined}
     >
-      <Box width={3}><Text color={selected ? RUNWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
-      <Box width={3}><Text color={selected ? RUNWIRE_ACCENT : undefined} dimColor={!selected}>{icon}</Text></Box>
-      <Box flexGrow={1}><Text color={selected ? RUNWIRE_ACCENT : undefined} bold={selected}>{label}</Text></Box>
-      {hint ? <Text color={selected ? RUNWIRE_ACCENT : undefined} dimColor={!selected}>{hint}</Text> : null}
+      <Box width={3}><Text color={selected ? ROUTEWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
+      <Box width={3}><Text color={selected ? ROUTEWIRE_ACCENT : undefined} dimColor={!selected}>{icon}</Text></Box>
+      <Box flexGrow={1}><Text color={selected ? ROUTEWIRE_ACCENT : undefined} bold={selected}>{label}</Text></Box>
+      {hint ? <Text color={selected ? ROUTEWIRE_ACCENT : undefined} dimColor={!selected}>{hint}</Text> : null}
     </Box>
   );
 }
 
 function SettingsNavRow({label, selected}: {label: string; selected: boolean}) {
   return (
-    <Box width="100%" paddingX={1} backgroundColor={selected ? RUNWIRE_SELECTION : undefined}>
-      <Box width={3}><Text color={selected ? RUNWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
-      <Text color={selected ? RUNWIRE_ACCENT : undefined} bold={selected}>{label}</Text>
+    <Box width="100%" paddingX={1} backgroundColor={selected ? ROUTEWIRE_SELECTION : undefined}>
+      <Box width={3}><Text color={selected ? ROUTEWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
+      <Text color={selected ? ROUTEWIRE_ACCENT : undefined} bold={selected}>{label}</Text>
     </Box>
   );
 }
@@ -614,14 +614,14 @@ function SettingsValueRow({
   valueColor?: string;
 }) {
   return (
-    <Box width="100%" paddingX={1} backgroundColor={selected ? RUNWIRE_SELECTION : undefined}>
-      <Box width={3}><Text color={selected ? RUNWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
+    <Box width="100%" paddingX={1} backgroundColor={selected ? ROUTEWIRE_SELECTION : undefined}>
+      <Box width={3}><Text color={selected ? ROUTEWIRE_ACCENT : undefined}>{selected ? "›" : " "}</Text></Box>
       <Box width={24}>
-        <Text color={selected ? RUNWIRE_ACCENT : undefined} bold={selected}>{label}</Text>
+        <Text color={selected ? ROUTEWIRE_ACCENT : undefined} bold={selected}>{label}</Text>
       </Box>
       <Box flexGrow={1} justifyContent="flex-end">
         {adjustable ? <Text dimColor>‹ </Text> : null}
-        <Text color={valueColor ?? (selected ? RUNWIRE_ACCENT : undefined)} dimColor={dimValue}>{value}</Text>
+        <Text color={valueColor ?? (selected ? ROUTEWIRE_ACCENT : undefined)} dimColor={dimValue}>{value}</Text>
         {adjustable ? <Text dimColor> ›</Text> : null}
       </Box>
     </Box>
@@ -631,7 +631,7 @@ function SettingsValueRow({
 function SettingsDirtyNotice() {
   return (
     <Box marginTop={2}>
-      <Text color={RUNWIRE_ACCENT}>Changes apply after restart.</Text>
+      <Text color={ROUTEWIRE_ACCENT}>Changes apply after restart.</Text>
     </Box>
   );
 }
@@ -643,7 +643,7 @@ function isSettingsWorkspaceView(view: InkView): boolean {
     view === "agent_models";
 }
 
-function settingsFooterItems(state: RunwireInkState): string[] {
+function settingsFooterItems(state: RoutewireInkState): string[] {
   if (state.editing) return ["type value", "enter save", "esc cancel"];
   if (state.view === "settings") return ["↑↓ move", "enter open", "esc back", "q quit"];
   if (state.view === "settings_connection") {
@@ -711,7 +711,7 @@ function AgentsRail({agents, now}: {agents: InkAgentActivity[]; now: number}) {
   return (
     <Box flexDirection="column" width="100%">
       <Box gap={1}>
-        <Text color={RUNWIRE_ACCENT} bold>Agents</Text>
+        <Text color={ROUTEWIRE_ACCENT} bold>Agents</Text>
         <Text dimColor>{agents.length} active</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
@@ -757,7 +757,7 @@ function Footer({
   permissions,
 }: {
   items: string[];
-  permissions: RunwireSettings["sandboxMode"];
+  permissions: RoutewireSettings["sandboxMode"];
 }) {
   return (
     <Box
@@ -787,9 +787,9 @@ function Footer({
   );
 }
 
-const RUNWIRE_ACCENT = "#F6B453";
-const RUNWIRE_SELECTION = "#2A2115";
-const RUNWIRE_MARK = "//>";
+const ROUTEWIRE_ACCENT = "#F6B453";
+const ROUTEWIRE_SELECTION = "#2A2115";
+const ROUTEWIRE_MARK = "//>";
 
 const ACTIVITY_NEUTRAL = "#C1C8D0";
 const ACTIVITY_READ = "#6FA8D8";
@@ -834,7 +834,7 @@ function activityKindColor(kind: ActivityKind, isError?: boolean): string {
   return ACTIVITY_NEUTRAL;
 }
 
-function mainAction(state: RunwireInkState): string {
+function mainAction(state: RoutewireInkState): string {
   if (state.runtimeState === "starting") return "Starting…";
   if (state.runtimeState === "stopping") return "Stopping…";
   if (state.runtimeState === "running" && state.runtimeDirty) return "Apply & restart";
@@ -842,14 +842,14 @@ function mainAction(state: RunwireInkState): string {
   return "Start";
 }
 
-function mainActionIcon(state: RunwireInkState): string {
+function mainActionIcon(state: RoutewireInkState): string {
   if (state.runtimeState === "running" && state.runtimeDirty) return "↻";
   if (state.runtimeState === "running") return "Ⅱ";
   if (state.runtimeState === "starting" || state.runtimeState === "stopping") return "…";
   return "▶";
 }
 
-function connectionStatus(state: RunwireInkState): string {
+function connectionStatus(state: RoutewireInkState): string {
   if (!state.settings.tunnelEnabled) return "Local only";
   if (!state.settings.tunnelId) return "Tunnel ID missing";
   if (!state.apiKeyConfigured) return "API key missing";
@@ -857,7 +857,7 @@ function connectionStatus(state: RunwireInkState): string {
   return "Configured";
 }
 
-function sandboxLabel(value: RunwireSettings["sandboxMode"]): string {
+function sandboxLabel(value: RoutewireSettings["sandboxMode"]): string {
   if (value === "read-only") return "Read only";
   if (value === "danger-full-access") return "Full access";
   return "Workspace write";

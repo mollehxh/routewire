@@ -1,6 +1,6 @@
-# Contributing to Runwire
+# Contributing to Routewire
 
-Runwire is a Node.js 22+ TypeScript project.
+Routewire is a Node.js 22+ TypeScript project.
 
 ## Development
 
@@ -26,5 +26,5 @@ pull request, make sure all three checks above pass.
 ## Reporting bugs
 
 Open a GitHub issue with a minimal reproduction, platform details, Node.js
-version, Codex version, and relevant Runwire logs with credentials and private
+version, Codex version, and relevant Routewire logs with credentials and private
 content removed.
