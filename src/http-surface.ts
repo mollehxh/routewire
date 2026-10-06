@@ -12,6 +12,7 @@ import type { CollaborationTool } from "./mcp/collaboration-tools.js";
 import { handleModernMcpRequest } from "./mcp/modern.js";
 import type { ProjectedNativeTool } from "./mcp/projected-tools.js";
 import type { NativeSkillTools } from "./mcp/skill-tools.js";
+import { createRoutewireMcpServer } from "./mcp/server.js";
 import { handleProviderHttpRequest } from "./provider/http.js";
 import type { ExecToolSpec } from "./provider/protocol.js";
 import type { ReasoningEffort } from "./model-catalog.js";
@@ -135,8 +136,26 @@ export class RoutewireHttpSurface {
         const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
-        await this.#mcpServer.connect(transport);
-        await transport.handleRequest(req, res);
+        // Stateless HTTP requests each own a transport and server connection.
+        const requestServer = createRoutewireMcpServer({
+          bridge: this.#bridge,
+          execSpec: this.#execSpec,
+          projectedTools: this.#projectedTools,
+          nativeSkillTools: this.#nativeSkillTools,
+          collaborationTools: this.#collaborationTools,
+          onEvent: this.#onEvent,
+          refreshProjectedTools: this.#refreshProjectedTools,
+        });
+        const cleanup = () => { void requestServer.close().catch(() => undefined); };
+        res.once("close", cleanup);
+        try {
+          await requestServer.connect(transport);
+          await transport.handleRequest(req, res);
+        } catch (error) {
+          res.off("close", cleanup);
+          await requestServer.close().catch(() => undefined);
+          throw error;
+        }
       } catch (error) {
         if (!res.headersSent) {
           res.writeHead(500, { "content-type": "application/json" });
