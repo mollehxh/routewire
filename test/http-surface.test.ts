@@ -53,6 +53,33 @@ function initialRequest() {
 }
 
 describe("RoutewireHttpSurface", () => {
+  it("accepts repeated legacy MCP connections after the tunnel startup probe", async () => {
+    const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
+    bridge.acceptModelRequest(initialRequest(), () => undefined);
+    const execSpec = await bridge.ready();
+    const surface = new RoutewireHttpSurface({ bridge });
+    await surface.start();
+    surface.setMcpServer(createRoutewireMcpServer({ bridge, execSpec }), execSpec);
+    closers.push(() => surface.close());
+
+    const probe = await fetch(surface.mcpUrl, { headers: { accept: "application/json" } });
+    await probe.text();
+
+    for (let id = 1; id <= 3; id++) {
+      const response = await fetch(surface.mcpUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id, method: "initialize",
+          params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "legacy-test", version: "1" } },
+        }),
+      });
+      const body = await response.text();
+      expect(response.status, body).toBe(200);
+      expect(body).toContain('"name":"routewire"');
+    }
+  });
+
   it("releases the HTTP listener even when MCP cleanup fails", async () => {
     const bridge = new CodexTurnBridge({ model: "gpt-5.6-sol" });
     bridge.acceptModelRequest(initialRequest(), () => undefined);

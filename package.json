@@ -44,8 +44,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@modelcontextprotocol/node": "^2.1.0",
-    "@modelcontextprotocol/server": "^2.2.0",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1",
     "adm-zip": "^0.6.1",
     "cross-spawn": "^7.0.6",
     "ink": "7.1.1",
