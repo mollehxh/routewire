@@ -68,7 +68,7 @@ beforeEach(() => {
   listeners = Object.fromEntries(lifecycleSignals.map(signal => [signal, signalListeners(signal)]));
   vi.stubEnv("ROUTEWIRE_TUNNEL_ID", "");
   vi.stubEnv("ROUTEWIRE_TUNNEL_API_KEY_FILE", "");
-  vi.stubEnv("CONTROL_PLANE_API_KEY", "");
+  vi.stubEnv("CONTROL_PLANE_API_KEY", "test-key");
 });
 afterEach(async () => {
   mocks.instances[0]?.options.onQuit?.();
@@ -86,11 +86,29 @@ async function startInteractive() {
   await vi.waitFor(() => expect(mocks.instances).toHaveLength(1));
   const tui = mocks.instances[0]!;
   await vi.waitFor(() => expect(tui.finishUpdateCheck).toHaveBeenCalledTimes(1));
-  tui.options.onStart?.(structuredClone(DEFAULT_ROUTEWIRE_SETTINGS));
+  tui.options.onStart?.({...structuredClone(DEFAULT_ROUTEWIRE_SETTINGS), tunnelId: "tunnel_test"});
   return tui;
 }
 
 describe("interactive CLI lifecycle", () => {
+  it("always starts the tunnel even if a legacy caller passes tunnelEnabled=false", async () => {
+    mocks.startRoutewire.mockResolvedValue(runtime().value);
+    const tui = await startInteractive();
+    await vi.waitFor(() => expect(mocks.startRoutewire).toHaveBeenCalledTimes(1));
+    expect(mocks.startRoutewire.mock.calls[0]![0].tunnel.tunnelId).toBe("tunnel_test");
+    tui.options.onStart?.({...DEFAULT_ROUTEWIRE_SETTINGS, tunnelId: "tunnel_test", ...{tunnelEnabled: false}});
+    await vi.waitFor(() => expect(mocks.startRoutewire).toHaveBeenCalledTimes(2));
+    expect(mocks.startRoutewire.mock.calls[1]![0].tunnel.tunnelId).toBe("tunnel_test");
+  });
+
+  it("rejects startup without a tunnel ID before starting Codex", async () => {
+    done = runInteractive(parseCliOptions([]));
+    const tui = mocks.instances[0]!;
+    tui.options.onStart?.(structuredClone(DEFAULT_ROUTEWIRE_SETTINGS));
+    await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("error", expect.stringContaining("Tunnel ID")));
+    expect(mocks.startRoutewire).not.toHaveBeenCalled();
+  });
+
   it("restores the terminal and completes Quit when runtime cleanup rejects", async () => {
     const current = runtime(vi.fn().mockRejectedValue(new Error("cleanup failed")));
     mocks.startRoutewire.mockResolvedValue(current.value);
@@ -112,7 +130,7 @@ describe("interactive CLI lifecycle", () => {
     const tui = await startInteractive();
     await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("running"));
     tui.options.onStop?.();
-    tui.options.onStart?.(structuredClone(DEFAULT_ROUTEWIRE_SETTINGS));
+    tui.options.onStart?.({...structuredClone(DEFAULT_ROUTEWIRE_SETTINGS), tunnelId: "tunnel_test"});
     await vi.waitFor(() => expect(first.close).toHaveBeenCalledTimes(1));
     expect(mocks.startRoutewire).toHaveBeenCalledTimes(1);
     cleanup.resolve();
@@ -126,7 +144,7 @@ describe("interactive CLI lifecycle", () => {
     mocks.startRoutewire.mockResolvedValueOnce(first.value).mockResolvedValueOnce(second.value);
     const tui = await startInteractive();
     await vi.waitFor(() => expect(tui.setRuntimeState).toHaveBeenCalledWith("running"));
-    tui.options.onStart?.(structuredClone(DEFAULT_ROUTEWIRE_SETTINGS));
+    tui.options.onStart?.({...structuredClone(DEFAULT_ROUTEWIRE_SETTINGS), tunnelId: "tunnel_test"});
     await vi.waitFor(() => expect(mocks.startRoutewire).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(tui.setRuntimeState.mock.calls.filter(([state]) => state === "running")).toHaveLength(2));
     tui.setRuntimeState.mockClear();

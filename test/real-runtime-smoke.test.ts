@@ -13,6 +13,7 @@ describe.skipIf(!runRealCodex)("real Codex runtime", () => {
     "round-trips an MCP exec call through a live Codex turn without Codex inference",
     async () => {
       const runtime = await startRoutewire({
+        tunnel: {tunnelId: process.env.ROUTEWIRE_TUNNEL_ID ?? ""},
         cwd: process.cwd(),
         model: "gpt-5.6-sol",
         codexHome:

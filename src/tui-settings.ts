@@ -7,7 +7,6 @@ export type CodexApprovalPolicy = "never";
 export type SubagentModel = string;
 
 export interface RoutewireSettings {
-  tunnelEnabled: boolean;
   tunnelId: string;
   sandboxMode: CodexSandboxMode;
   approvalPolicy: CodexApprovalPolicy;
@@ -16,7 +15,6 @@ export interface RoutewireSettings {
 }
 
 export const DEFAULT_ROUTEWIRE_SETTINGS: RoutewireSettings = {
-  tunnelEnabled: false,
   tunnelId: "",
   sandboxMode: "workspace-write",
   approvalPolicy: "never",
@@ -32,8 +30,7 @@ export function loadRoutewireSettings(): RoutewireSettings {
     const allowedSubagentModels = Array.isArray(parsed.allowedSubagentModels)
       ? parsed.allowedSubagentModels.filter(value => typeof value === "string" && value.length > 0)
       : ["gpt-6-luna"];
-    return {
-      tunnelEnabled: parsed.tunnelEnabled === true,
+    const settings: RoutewireSettings = {
       tunnelId: typeof parsed.tunnelId === "string" ? parsed.tunnelId : "",
       sandboxMode:
         parsed.sandboxMode === "read-only" ||
@@ -45,6 +42,14 @@ export function loadRoutewireSettings(): RoutewireSettings {
       fastMode: parsed.fastMode !== false,
       allowedSubagentModels,
     };
+    if (Object.hasOwn(parsed, "tunnelEnabled")) {
+      try {
+        saveRoutewireSettings(settings);
+      } catch {
+        // A read-only config must not prevent using the migrated settings.
+      }
+    }
+    return settings;
   } catch {
     return structuredClone(DEFAULT_ROUTEWIRE_SETTINGS);
   }

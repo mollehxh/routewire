@@ -32,7 +32,7 @@ export interface StartRoutewireOptions {
   quietCodex?: boolean;
   codexCommand?: string;
   startupTimeoutMs?: number;
-  tunnel?: RoutewireTunnelOptions;
+  tunnel: RoutewireTunnelOptions;
   onEvent?: (event: RoutewireRuntimeEvent) => void;
 }
 
@@ -42,12 +42,15 @@ export interface RoutewireRuntime {
   readonly mcpUrl: string;
   readonly providerBaseUrl: string;
   readonly execSpec: ExecToolSpec;
-  readonly tunnelHealthUrl?: string;
+  readonly tunnelHealthUrl: string;
   readonly codexExited: Promise<CodexExit>;
   close(): Promise<void>;
 }
 
 export async function startRoutewire(options: StartRoutewireOptions): Promise<RoutewireRuntime> {
+  if (!options.tunnel || !/^tunnel_[A-Za-z0-9._-]+$/.test(options.tunnel.tunnelId)) {
+    throw new Error("Routewire requires a valid OpenAI Secure MCP Tunnel ID");
+  }
   const model = options.model ?? "gpt-5.6-sol";
   const modelCatalog = options.modelCatalog ?? loadCodexModelCatalog(options.codexHome);
   const allowedSubagentModels = options.allowedSubagentModels ?? ["gpt-6-luna"];
@@ -176,57 +179,53 @@ export async function startRoutewire(options: StartRoutewireOptions): Promise<Ro
     surface.setMcpServer(mcpServer, execSpec, projectedTools, nativeSkillTools, collaborationTools, refreshProjectedTools);
     emit({ type: "component", component: "codex", state: "ready", detail: model });
 
-    if (options.tunnel) {
-      emit({ type: "component", component: "tunnel", state: "starting" });
-      const tunnelStartup = (async () => {
-        const tunnelCommand =
-          options.tunnel!.command ?? (await ensureTunnelClient());
-        return startTunnelClient({
-          ...options.tunnel!,
-          command: tunnelCommand,
-          mcpUrl: surface.mcpUrl,
-        });
-      })();
-      const startupResult = await Promise.race([
-        tunnelStartup.then(handle => ({ kind: "tunnel" as const, handle })),
-        codexExitWatch.then(exit => ({ kind: "codex_exit" as const, exit })),
-      ]);
-      if (startupResult.kind === "codex_exit") {
-        void tunnelStartup.then(handle => handle.close()).catch(() => undefined);
-        throw codexExitedDuringTunnelStartup(startupResult.exit);
-      }
-      if (closing) {
-        await startupResult.handle.close();
-        throw new Error("Routewire startup cancelled");
-      }
-      tunnel = startupResult.handle;
+    emit({ type: "component", component: "tunnel", state: "starting" });
+    const tunnelStartup = (async () => {
+      const tunnelCommand =
+        options.tunnel.command ?? (await ensureTunnelClient());
+      return startTunnelClient({
+        ...options.tunnel,
+        command: tunnelCommand,
+        mcpUrl: surface.mcpUrl,
+      });
+    })();
+    const startupResult = await Promise.race([
+      tunnelStartup.then(handle => ({ kind: "tunnel" as const, handle })),
+      codexExitWatch.then(exit => ({ kind: "codex_exit" as const, exit })),
+    ]);
+    if (startupResult.kind === "codex_exit") {
+      void tunnelStartup.then(handle => handle.close()).catch(() => undefined);
+      throw codexExitedDuringTunnelStartup(startupResult.exit);
+    }
+    if (closing) {
+      await startupResult.handle.close();
+      throw new Error("Routewire startup cancelled");
+    }
+    tunnel = startupResult.handle;
+    emit({
+      type: "component",
+      component: "tunnel",
+      state: "ready",
+      detail: tunnel.healthUrl,
+    });
+    void tunnel.exited.then(exit => {
+      if (closing) return;
       emit({
         type: "component",
         component: "tunnel",
-        state: "ready",
-        detail: tunnel.healthUrl,
+        state: "error",
+        detail: exit.error?.message ?? `exited with code ${String(exit.code)}`,
       });
-      void tunnel.exited.then(exit => {
-        if (closing) return;
-        emit({
-          type: "component",
-          component: "tunnel",
-          state: "error",
-          detail: exit.error?.message ?? `exited with code ${String(exit.code)}`,
-        });
+    });
+    void tunnel.unhealthy.then(error => {
+      if (closing) return;
+      emit({
+        type: "component",
+        component: "tunnel",
+        state: "error",
+        detail: error.message,
       });
-      void tunnel.unhealthy.then(error => {
-        if (closing) return;
-        emit({
-          type: "component",
-          component: "tunnel",
-          state: "error",
-          detail: error.message,
-        });
-      });
-    } else {
-      emit({ type: "component", component: "tunnel", state: "stopped" });
-    }
+    });
 
     return {
       model,
@@ -234,7 +233,7 @@ export async function startRoutewire(options: StartRoutewireOptions): Promise<Ro
       mcpUrl: surface.mcpUrl,
       providerBaseUrl: surface.providerBaseUrl,
       execSpec,
-      tunnelHealthUrl: tunnel?.healthUrl,
+      tunnelHealthUrl: tunnel!.healthUrl,
       codexExited: codex.exited,
       close,
     };

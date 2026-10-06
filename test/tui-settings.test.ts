@@ -23,12 +23,29 @@ afterEach(() => {
 });
 
 describe("Routewire settings", () => {
+  it.each([false, true])("removes legacy tunnelEnabled=%s while preserving connection settings", enabled => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-tunnel-migration-"));
+    process.env.XDG_CONFIG_HOME = root;
+    saveApiKey("existing-key");
+    fs.writeFileSync(settingsPath(), JSON.stringify({
+      ...DEFAULT_ROUTEWIRE_SETTINGS,
+      tunnelEnabled: enabled,
+      tunnelId: "tunnel_existing",
+      sandboxMode: "read-only",
+    }));
+
+    const settings = loadRoutewireSettings();
+    expect(settings).toMatchObject({tunnelId: "tunnel_existing", sandboxMode: "read-only"});
+    expect(settings).not.toHaveProperty("tunnelEnabled");
+    expect(JSON.parse(fs.readFileSync(settingsPath(), "utf8"))).toEqual(settings);
+    expect(fs.readFileSync(apiKeyPath(), "utf8").trim()).toBe("existing-key");
+  });
+
   it("persists product settings and an allowlist of subagent models", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "routewire-settings-"));
     process.env.XDG_CONFIG_HOME = root;
     saveRoutewireSettings({
       ...DEFAULT_ROUTEWIRE_SETTINGS,
-      tunnelEnabled: true,
       tunnelId: "tunnel_test",
       sandboxMode: "read-only",
       fastMode: false,
@@ -37,7 +54,6 @@ describe("Routewire settings", () => {
 
     expect(settingsPath()).toBe(path.join(root, "routewire", "settings.json"));
     expect(loadRoutewireSettings()).toMatchObject({
-      tunnelEnabled: true,
       tunnelId: "tunnel_test",
       sandboxMode: "read-only",
       fastMode: false,
@@ -63,12 +79,11 @@ describe("Routewire settings", () => {
     fs.mkdirSync(path.dirname(legacyKey), {recursive: true});
     fs.writeFileSync(path.join(legacyDir, "settings.json"), JSON.stringify({
       ...DEFAULT_ROUTEWIRE_SETTINGS,
-      tunnelEnabled: true,
       tunnelId: "tunnel_legacy",
     }));
     fs.writeFileSync(legacyKey, "legacy-secret\n");
 
-    expect(loadRoutewireSettings()).toMatchObject({tunnelEnabled: true, tunnelId: "tunnel_legacy"});
+    expect(loadRoutewireSettings()).toMatchObject({tunnelId: "tunnel_legacy"});
     expect(hasStoredApiKey()).toBe(true);
     expect(storedApiKeyPath()).toBe(legacyKey);
     expect(settingsPath()).toBe(path.join(root, "routewire", "settings.json"));

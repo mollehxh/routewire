@@ -9,7 +9,7 @@ import { ROUTEWIRE_VERSION } from "./meta.js";
 import { loadCodexModelCatalog } from "./model-catalog.js";
 import { startRoutewire, type RoutewireRuntime } from "./runtime.js";
 import { RoutewireTui } from "./tui.js";
-import { hasStoredApiKey, storedApiKeyPath, type RoutewireSettings } from "./tui-settings.js";
+import { hasStoredApiKey, loadRoutewireSettings, storedApiKeyPath, type RoutewireSettings } from "./tui-settings.js";
 import {checkForRoutewireUpdate, installRoutewireUpdate, type RoutewireUpdateInfo} from "./update.js";
 
 const HELP = `routewire
@@ -79,7 +79,7 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
     modelCatalog,
     loadModelCatalog: () => loadCodexModelCatalog(options.codexHome),
     initialSettings: {
-      ...(tunnelId ? { tunnelEnabled: true, tunnelId } : {}),
+      ...(tunnelId ? { tunnelId } : {}),
       ...(options.dangerFullAccess
         ? { sandboxMode: "danger-full-access" as const, approvalPolicy: "never" as const }
         : {}),
@@ -167,14 +167,12 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
       modelCatalog: currentModelCatalog,
       quietCodex: true,
       onEvent: event => tui.handle(event),
-      tunnel: settings.tunnelEnabled
-        ? {
-            tunnelId: settings.tunnelId,
-            apiKeyFile: tunnelApiKeyFile ?? storedKeyFile,
-            command: tunnelClient,
-            quiet: true,
-          }
-        : undefined,
+      tunnel: {
+        tunnelId: settings.tunnelId,
+        apiKeyFile: tunnelApiKeyFile ?? storedKeyFile,
+        command: tunnelClient,
+        quiet: true,
+      },
     });
     runtime = next;
     tui.setRuntimeState("running");
@@ -220,12 +218,14 @@ export async function runInteractive(options: ReturnType<typeof parseCliOptions>
   process.off("SIGTERM", requestQuit);
 }
 
-async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise<void> {
-  const tunnelId = options.tunnelId ?? routewireEnv("ROUTEWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID");
+export async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise<void> {
+  const settings = loadRoutewireSettings();
+  const tunnelId = options.tunnelId ?? routewireEnv("ROUTEWIRE_TUNNEL_ID", "SIDEBAND_TUNNEL_ID") ?? settings.tunnelId;
   const tunnelApiKeyFile =
     options.tunnelApiKeyFile ?? routewireEnv("ROUTEWIRE_TUNNEL_API_KEY_FILE", "SIDEBAND_TUNNEL_API_KEY_FILE");
   const tunnelClient =
     options.tunnelClient ?? routewireEnv("ROUTEWIRE_TUNNEL_CLIENT", "SIDEBAND_TUNNEL_CLIENT");
+  validateLaunchSettings({ ...settings, tunnelId }, tunnelApiKeyFile);
   const runtime = await startRoutewire({
     cwd: process.cwd(),
     host: options.host,
@@ -234,20 +234,18 @@ async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise
     codexHome: options.codexHome,
     dangerFullAccess: options.dangerFullAccess,
     quietCodex: false,
-    tunnel: tunnelId
-      ? { tunnelId, apiKeyFile: tunnelApiKeyFile, command: tunnelClient }
-      : undefined,
+    tunnel: {
+      tunnelId,
+      apiKeyFile: tunnelApiKeyFile ?? (!process.env.CONTROL_PLANE_API_KEY ? storedApiKeyPath() : undefined),
+      command: tunnelClient,
+    },
   });
 
   process.stdout.write(`[routewire] project: ${runtime.cwd}\n`);
   process.stdout.write(`[routewire] model: ${runtime.model}\n`);
   process.stdout.write(`[routewire] MCP: ${runtime.mcpUrl}\n`);
   process.stdout.write(`[routewire] provider: ${runtime.providerBaseUrl}\n`);
-  process.stdout.write(
-    runtime.tunnelHealthUrl
-      ? `[routewire] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`
-      : "[routewire] Secure MCP Tunnel: not configured\n",
-  );
+  process.stdout.write(`[routewire] Secure MCP Tunnel: ready (${runtime.tunnelHealthUrl})\n`);
 
   let stopping = false;
   const stop = async () => {
@@ -267,7 +265,6 @@ async function runHeadless(options: ReturnType<typeof parseCliOptions>): Promise
 }
 
 function validateLaunchSettings(settings: RoutewireSettings, externalApiKeyFile?: string): void {
-  if (!settings.tunnelEnabled) return;
   if (!/^tunnel_[A-Za-z0-9._-]+$/.test(settings.tunnelId)) {
     throw new Error("Set a valid Tunnel ID in Connection before starting");
   }

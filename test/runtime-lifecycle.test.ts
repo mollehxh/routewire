@@ -1,11 +1,21 @@
 import {mkdtemp, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {afterEach, describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {startCodexProcess} from "../src/codex/process.js";
 import {startRoutewire} from "../src/runtime.js";
 import {Client, StreamableHTTPClientTransport} from "@modelcontextprotocol/client";
 import {MODERN_MCP_PROTOCOL_VERSION} from "../src/mcp/modern.js";
+
+vi.mock("../src/tunnel/process.js", () => ({
+  startTunnelClient: vi.fn(async () => ({
+    healthUrl: "http://127.0.0.1:9999/health",
+    exited: new Promise(() => {}),
+    unhealthy: new Promise(() => {}),
+    close: vi.fn(async () => undefined),
+  })),
+}));
+const testTunnel = {tunnelId: "tunnel_test", command: "test-tunnel"};
 
 const cleanup: Array<() => Promise<unknown>> = [];
 afterEach(async () => {for (const close of cleanup.splice(0).reverse()) await close();});
@@ -25,6 +35,11 @@ const tools={type:'additional_tools',tools:[{type:'namespace',name:'functions',t
 const request = async input => (await fetch(base+'/responses',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model,input:[tools,...input]})})).text();`;
 
 describe("runtime failure recovery", () => {
+  it("requires a tunnel before allocating runtime resources", async () => {
+    await expect(startRoutewire({cwd: "/unused"} as Parameters<typeof startRoutewire>[0]))
+      .rejects.toThrow(/requires.*Tunnel ID/);
+  });
+
   it("refreshes late CUA registration on both MCP surfaces and routes the direct call", async () => {
     const {dir, command} = await helper(`(async()=>{${initial}
       let output=[], cycle=0;
@@ -37,7 +52,7 @@ describe("runtime failure recovery", () => {
         output=[{type:'custom_tool_call_output',call_id:event.item.call_id,output:[{type:'input_text',text}]}];
       }
     })().catch(()=>process.exit(24));`);
-    const runtime=await startRoutewire({cwd:dir,codexHome:dir,model:"test",modelCatalog:[],codexCommand:command,quietCodex:true});
+    const runtime=await startRoutewire({tunnel: testTunnel, cwd:dir,codexHome:dir,model:"test",modelCatalog:[],codexCommand:command,quietCodex:true});
     cleanup.push(()=>runtime.close());
     const client=new Client({name:"late-tools",version:"0"});
     await client.connect(new StreamableHTTPClientTransport(new URL(runtime.mcpUrl)));
@@ -58,7 +73,7 @@ describe("runtime failure recovery", () => {
   it("rejects startup when Codex exits during discovery and releases the port", async () => {
     const {dir, command} = await helper(`(async()=>{${initial} await request([]); process.exit(23);})().catch(()=>process.exit(24));`);
     let url = "";
-    const startup = startRoutewire({cwd: dir, codexHome: dir, model: "test", modelCatalog: [], codexCommand: command, quietCodex: true,
+    const startup = startRoutewire({tunnel: testTunnel, cwd: dir, codexHome: dir, model: "test", modelCatalog: [], codexCommand: command, quietCodex: true,
       onEvent: event => {if(event.type==='component' && event.component==='mcp' && event.state==='ready') url=event.detail!;},
     });
     await expect(Promise.race([startup, new Promise((_,reject)=>setTimeout(()=>reject(new Error("startup stayed pending")), 2000))])).rejects.toThrow(/exited.*23/);
@@ -67,7 +82,7 @@ describe("runtime failure recovery", () => {
 
   it("surfaces the final Codex stderr line when startup fails", async () => {
     const {dir, command} = await helper(`process.stderr.write('ERROR: provider unavailable\\n'); process.exit(23);`);
-    await expect(startRoutewire({
+    await expect(startRoutewire({tunnel: testTunnel,
       cwd: dir,
       codexHome: dir,
       modelCatalog: [],
@@ -78,7 +93,7 @@ describe("runtime failure recovery", () => {
 
   it("bounds startup when a live Codex never requests the provider", async () => {
     const {dir, command} = await helper("setInterval(()=>{},1000);");
-    await expect(startRoutewire({cwd: dir, codexHome: dir, modelCatalog: [], codexCommand: command, quietCodex: true,
+    await expect(startRoutewire({tunnel: testTunnel, cwd: dir, codexHome: dir, modelCatalog: [], codexCommand: command, quietCodex: true,
       startupTimeoutMs: 100,
     })).rejects.toThrow(/startup.*timed out/i);
   });
@@ -91,7 +106,7 @@ describe("runtime failure recovery", () => {
       }
       setTimeout(()=>process.exit(23), 500); await request(output);
     })().catch(()=>process.exit(24));`);
-    const runtime = await startRoutewire({cwd:dir,codexHome:dir,model:"test",modelCatalog:[],codexCommand:command,quietCodex:true});
+    const runtime = await startRoutewire({tunnel: testTunnel, cwd:dir,codexHome:dir,model:"test",modelCatalog:[],codexCommand:command,quietCodex:true});
     cleanup.push(() => runtime.close());
     await runtime.codexExited;
     await expect.poll(async () => {

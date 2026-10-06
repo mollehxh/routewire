@@ -5,13 +5,14 @@ MCP server. ChatGPT can remain the reasoning model while Codex executes the
 same local tools, skills, Browser/Computer Use runtimes, and subagent surface
 available to that turn.
 
-Routewire is local-first: the HTTP/MCP surface binds to loopback only unless you
-explicitly connect it through the OpenAI Secure MCP Tunnel.
+Routewire connects through the OpenAI Secure MCP Tunnel. Its internal HTTP/MCP
+listener binds to loopback only; a tunnel ID and runtime API key are required.
 
 ## Requirements
 
 - Node.js 22 or newer
 - A working Codex installation and authentication
+- An OpenAI Secure MCP Tunnel ID and runtime API key with Tunnels Read + Use permissions
 
 ## Install
 
@@ -27,7 +28,7 @@ npx routewire
 ```
 
 Routewire starts the interactive TUI when attached to a terminal. In headless
-mode it prints the local MCP and provider endpoints.
+mode it uses the same required tunnel and prints the local MCP and provider endpoints.
 
 ## Updates
 
@@ -83,8 +84,13 @@ runtime-specific bootstrap, skill-loading, and tool-selection workflow.
 
 ## OpenAI Secure MCP Tunnel
 
-Set a tunnel ID to connect Routewire's local MCP surface through the official
-OpenAI tunnel client:
+The tunnel is always required. Configure Tunnel ID and API key under
+Settings > Connection in the TUI, or supply them through flags or environment variables:
+
+Existing settings are migrated automatically on the first launch after updating.
+The obsolete `tunnelEnabled` field is removed, including when it was `false`;
+saved tunnel IDs and API keys are preserved. Headless mode also uses saved
+connection settings. Without an ID or key, startup fails with a configuration error.
 
 ```bash
 export ROUTEWIRE_TUNNEL_ID=tunnel_...

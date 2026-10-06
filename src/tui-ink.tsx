@@ -870,7 +870,6 @@ function mainActionIcon(state: RoutewireInkState): string {
 }
 
 function connectionStatus(state: RoutewireInkState): string {
-  if (!state.settings.tunnelEnabled) return "Local only";
   if (!state.settings.tunnelId) return "Tunnel ID missing";
   if (!state.apiKeyConfigured) return "API key missing";
   if (state.runtimeState === "running" && state.components.get("tunnel") === "ready") return "Connected";
